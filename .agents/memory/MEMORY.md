@@ -1,0 +1,1 @@
+- [Prisma OpenSSL runtime](prisma-openssl-runtime.md) — the API may need the Nix `openssl` package for Prisma's native query engine.

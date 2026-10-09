@@ -24,6 +24,6 @@
 
 ## Scope
 
-Keep the imported structure and stack. IntelliClass is currently frontend-only: authentication, database persistence, AI services, real-time sessions, and device controls are not connected. No additional secrets or external services are needed to run the current UI.
+Keep the imported structure and stack. The project now includes a separate Express API backed by PostgreSQL through Prisma. Authentication, institution/user management, classes, subjects, classroom sessions, and attendance endpoints are implemented. The checked-in migration is applied to the development database. The API requires the Replit-provided `DATABASE_URL` and `SESSION_SECRET`; password-reset email delivery, AI services, live activity, and device controls are not connected. The current API tests use a mocked Prisma client and do not require a separate test database.
 
 This repository remains connected to Lovable. Do not rewrite published Git history.

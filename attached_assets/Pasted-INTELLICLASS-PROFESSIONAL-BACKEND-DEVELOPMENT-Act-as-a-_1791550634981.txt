@@ -1,0 +1,407 @@
+INTELLICLASS — PROFESSIONAL BACKEND DEVELOPMENT
+
+Act as a senior backend engineer and SaaS software architect. Build the backend for IntelliClass, an AI-powered classroom management platform intended for real educational institutions.
+
+This is a long-term commercial product. Prioritize security, maintainability, scalability, correct business logic, API documentation, and production-quality code.
+
+1. PROJECT OBJECTIVE
+
+Build a secure REST API backend that will eventually connect to an existing frontend developed using Lovable.
+
+The platform supports three primary roles:
+
+- Super Admin
+- Teacher
+- Student
+
+Substitute faculty recommendations will be managed through authorized admin/teacher workflows.
+
+The system must support:
+
+- Institution and user management
+- Classes, subjects and student enrollment
+- Classroom sessions
+- Attendance
+- Classroom application-restriction policies
+- Teacher-approved application permissions
+- Individual student exceptions
+- Session timers
+- Student activity event logging
+- Security alerts
+- AI-generated classroom reports
+- Faculty availability and substitute recommendations
+- Audit logs and notifications
+
+Use the IntelliClass project requirements as the source of truth for these modules.
+
+2. TECHNOLOGY STACK
+
+Use:
+
+- Node.js
+- TypeScript
+- Express.js
+- PostgreSQL
+- Prisma ORM
+- Zod for request validation
+- JWT-based API authentication integrated with secure session handling, or a well-maintained authentication provider if appropriate
+- OpenAPI/Swagger for API documentation
+- Vitest or Jest for automated tests
+- Structured logging
+
+Keep dependencies minimal and use stable, compatible versions.
+
+Use a modular architecture. Do not put all business logic in one file.
+
+3. REQUIRED BACKEND STRUCTURE
+
+Organize the application approximately as follows:
+
+src/
+app.ts
+server.ts
+config/
+middleware/
+modules/
+auth/
+institutions/
+users/
+students/
+teachers/
+classes/
+subjects/
+sessions/
+attendance/
+app-control/
+permissions/
+activity/
+alerts/
+ai-reports/
+faculty/
+notifications/
+audit-logs/
+services/
+utils/
+tests/
+
+Each module should have clear responsibilities and appropriate routes, controllers, services, validation schemas and database access.
+
+Keep configuration and secrets out of source code.
+
+4. DATABASE DESIGN
+
+Create relational database models and migrations for:
+
+- Institution
+- User
+- StudentProfile
+- TeacherProfile
+- Class
+- Subject
+- ClassEnrollment
+- ClassSession
+- AttendanceRecord
+- ApplicationCatalog
+- RestrictionPolicy
+- AppPermission
+- ActivityEvent
+- SecurityAlert
+- AIReport
+- FacultyAvailability
+- FacultyRecommendation
+- Notification
+- AuditLog
+
+Include primary keys, foreign keys, timestamps, appropriate unique constraints and indexes.
+
+Use institution-level data isolation. Every institution-owned record must be associated with the correct institution wherever applicable.
+
+Define explicit relationships between students, classes, sessions, teachers and activity records.
+
+Store timestamps consistently and handle local classroom time zones correctly.
+
+Do not store plaintext passwords, secrets or unnecessary personal information.
+
+5. AUTHENTICATION AND AUTHORIZATION
+
+Implement:
+
+- User login and logout
+- Secure password hashing
+- Token/session validation
+- Password-reset workflow with safe token expiry
+- Role-based authorization
+- Institution-level access control
+- Account status validation
+- Rate limiting on sensitive endpoints
+
+Enforce authorization on the server for every protected operation.
+
+A teacher must only manage authorized classes and active sessions.
+
+Students must only access their own records and permitted classroom information.
+
+Only authorized administrators may manage institution-wide settings, users and faculty assignments.
+
+Never trust a role, institution ID, student ID or teacher ID supplied by the frontend without validating it against the authenticated user.
+
+Do not implement public self-registration with automatic administrator privileges.
+
+6. CLASSROOM SESSION MANAGEMENT
+
+Implement APIs to:
+
+- Create and configure classes
+- Enroll students
+- Assign teachers and subjects
+- Create classroom sessions
+- Start, pause where supported, and end sessions
+- Record attendance
+- Retrieve session details
+- Retrieve session activity summaries
+
+Validate all state transitions. Prevent unauthorized session changes and conflicting active sessions where appropriate.
+
+Use database transactions for operations that must succeed or fail together.
+
+7. APPLICATION-CONTROL POLICIES
+
+Implement a policy engine supporting:
+
+- Block-all policy
+- Selected-application restriction policy
+- Teacher-approved application exceptions
+- Individual student permissions
+- Start and expiry times
+- Automatic policy expiry in the backend
+- Authorized teacher transfer
+- Policy history and audit records
+
+IMPORTANT TECHNICAL LIMITATION:
+
+The backend must distinguish between a stored restriction policy and an actually enforced restriction on an Android device.
+
+Do not claim that a phone application has been blocked merely because a database policy was created.
+
+For now, build the policy management APIs and an enforcement-status model. Record device acknowledgements only when a real, authenticated device integration reports them.
+
+Do not attempt to bypass Android permissions, device-owner restrictions, operating-system security or user consent.
+
+8. ACTIVITY LOGGING AND SECURITY ALERTS
+
+Create validated APIs for recording supported events such as:
+
+- Restriction-policy changes
+- Permission grants and expiry
+- Classroom session events
+- Device-reported restricted-app attempts
+- Supported application-usage summaries
+- Device connectivity and enforcement status
+
+Every event must include an event type, timestamp, session reference and authorized source.
+
+Associate student information only when the identity is reliably established.
+
+Prevent duplicate event submissions where practical using idempotency keys.
+
+Generate alerts for repeated reported restriction violations according to configurable thresholds.
+
+Do not fabricate student activity, device events or application usage.
+
+9. AI REPORTS
+
+Create an AI-report service with a provider abstraction so the AI provider can be changed later.
+
+The service should:
+
+- Summarize verified classroom activity
+- Count reported restriction attempts
+- Identify repeated events
+- Summarize permission grants
+- Produce teacher-friendly classroom reports
+- Clearly distinguish measured data from AI-generated interpretation
+
+Use environment variables for API credentials.
+
+If no AI provider is configured, provide a deterministic report generated from actual database records and clearly label it as a basic summary.
+
+Do not send unnecessary student personal information to external AI services.
+
+AI must not independently punish students or make high-impact disciplinary decisions.
+
+10. FACULTY ALLOCATION
+
+Implement:
+
+- Faculty subject expertise
+- Availability records
+- Timetable entries and conflict checks
+- Workload information
+- Substitute faculty candidate ranking
+
+Rank candidates using explainable criteria such as subject match, availability, timetable compatibility and workload.
+
+Return recommendations for authorized human approval. Do not automatically reassign teachers.
+
+11. API ENDPOINTS
+
+Create versioned endpoints under /api/v1.
+
+Include suitable routes for:
+
+Authentication:
+
+- POST /auth/login
+- POST /auth/logout
+- GET /auth/me
+- POST /auth/forgot-password
+- POST /auth/reset-password
+
+Administration:
+
+- GET/POST /institutions
+- GET/POST /users
+- GET/POST /students
+- GET/POST /teachers
+- GET/POST /classes
+- GET/POST /subjects
+
+Sessions:
+
+- GET/POST /sessions
+- GET /sessions/:id
+- POST /sessions/:id/start
+- POST /sessions/:id/end
+- GET /sessions/:id/attendance
+- PUT /sessions/:id/attendance
+
+Application control:
+
+- GET /sessions/:id/restrictions
+- POST /sessions/:id/restrictions
+- POST /sessions/:id/permissions
+- DELETE /permissions/:id
+
+Activity and reports:
+
+- POST /sessions/:id/events
+- GET /sessions/:id/activity
+- GET /sessions/:id/alerts
+- POST /sessions/:id/reports
+- GET /reports/:id
+
+Faculty:
+
+- GET /faculty/availability
+- POST /faculty/availability
+- POST /faculty/recommendations
+
+Notifications:
+
+- GET /notifications
+- PATCH /notifications/:id/read
+
+These routes are a starting specification. Implement correct HTTP methods, authorization, request validation, pagination, filtering and consistent error responses. Add further endpoints where necessary.
+
+12. SECURITY REQUIREMENTS
+
+Implement:
+
+- Strict request validation
+- Secure CORS configuration
+- Rate limiting
+- Safe error handling
+- SQL injection protection through Prisma
+- Protection against insecure direct object references
+- Institution-level isolation
+- Audit logging for sensitive operations
+- Secret management through environment variables
+- Secure production configuration
+- Pagination and reasonable request-size limits
+
+Never expose passwords, password hashes, private tokens or secrets in API responses or logs.
+
+Avoid logging unnecessary student personal data.
+
+13. FRONTEND INTEGRATION
+
+The backend will connect to an existing Lovable frontend.
+
+Create:
+
+- A documented API base URL
+- A documented authentication flow
+- Consistent JSON request/response formats
+- An example environment configuration
+- A frontend integration guide
+- A Swagger/OpenAPI page
+
+Allow the frontend origin through an explicit environment variable. Do not use unrestricted production CORS.
+
+Do not modify or replace the Lovable frontend.
+
+14. TESTING
+
+Write automated tests covering:
+
+- Authentication
+- Role-based authorization
+- Institution isolation
+- Student record privacy
+- Class and session lifecycle
+- Attendance validation
+- Restriction-policy creation and expiry
+- Permission expiry
+- Duplicate event handling
+- Alert generation
+- Faculty conflict detection
+- AI report generation
+
+Include tests proving that one institution cannot access another institution's records and that students cannot perform teacher/admin actions.
+
+Use a separate test database. Do not run destructive migrations against production data.
+
+15. DEPLOYMENT AND DELIVERY
+
+Provide:
+
+- A working development server
+- Database schema and migrations
+- Seed script using clearly marked sample data
+- .env.example containing variable names only
+- README with setup instructions
+- API documentation
+- Automated test commands
+- Production deployment instructions
+- Health-check endpoint
+
+Use the Replit-provided environment and deployment configuration appropriately.
+
+Do not commit real credentials.
+
+16. DEVELOPMENT RULES
+
+1. Inspect the existing Replit project before modifying files.
+2. Preserve useful existing code.
+3. If the repository is empty, initialize the backend cleanly.
+4. Implement in small, verifiable stages.
+5. Run tests and fix errors before declaring a stage complete.
+6. Do not claim a feature works unless it has been implemented and verified.
+7. Do not build fake device-control functionality.
+8. Do not add unrelated features.
+9. Keep the system maintainable and ready for future Android integration.
+
+FIRST MILESTONE
+
+Start by:
+
+1. Inspecting the repository and reporting its current state.
+2. Creating the backend foundation.
+3. Configuring PostgreSQL and Prisma.
+4. Creating the initial schema and migrations.
+5. Implementing authentication and authorization.
+6. Implementing institutions, users, classes, subjects and sessions.
+7. Adding Swagger documentation and automated tests.
+8. Running the application and reporting actual test results.
+
+Do not attempt to implement the entire product in one unverified pass. Complete the first milestone, explain what works, list any outstanding issues, and then wait for review before proceeding to advanced modules.
