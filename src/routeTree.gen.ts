@@ -10,33 +10,401 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as AdminAnalyticsRouteImport } from './routes/admin.analytics'
+import { Route as AdminClassesRouteImport } from './routes/admin.classes'
+import { Route as AdminDashboardRouteImport } from './routes/admin.dashboard'
+import { Route as AdminFacultyAllocationRouteImport } from './routes/admin.faculty-allocation'
+import { Route as AdminReportsRouteImport } from './routes/admin.reports'
+import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
+import { Route as AdminStudentsRouteImport } from './routes/admin.students'
+import { Route as AdminSubjectsRouteImport } from './routes/admin.subjects'
+import { Route as AdminTeachersRouteImport } from './routes/admin.teachers'
+import { Route as StudentActivityRouteImport } from './routes/student.activity'
+import { Route as StudentCurrentSessionRouteImport } from './routes/student.current-session'
+import { Route as StudentDashboardRouteImport } from './routes/student.dashboard'
+import { Route as StudentMyClassesRouteImport } from './routes/student.my-classes'
+import { Route as StudentNotificationsRouteImport } from './routes/student.notifications'
+import { Route as StudentPermissionsRouteImport } from './routes/student.permissions'
+import { Route as StudentProfileRouteImport } from './routes/student.profile'
+import { Route as TeacherAiReportsRouteImport } from './routes/teacher.ai-reports'
+import { Route as TeacherAlertsRouteImport } from './routes/teacher.alerts'
+import { Route as TeacherAttendanceRouteImport } from './routes/teacher.attendance'
+import { Route as TeacherClassroomControlRouteImport } from './routes/teacher.classroom-control'
+import { Route as TeacherDashboardRouteImport } from './routes/teacher.dashboard'
+import { Route as TeacherLiveActivityRouteImport } from './routes/teacher.live-activity'
+import { Route as TeacherMyClassesRouteImport } from './routes/teacher.my-classes'
+import { Route as TeacherMyScheduleRouteImport } from './routes/teacher.my-schedule'
+import { Route as TeacherProfileRouteImport } from './routes/teacher.profile'
+import { Route as TeacherStartClassRouteImport } from './routes/teacher.start-class'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminAnalyticsRoute = AdminAnalyticsRouteImport.update({
+  id: '/admin/analytics',
+  path: '/admin/analytics',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminClassesRoute = AdminClassesRouteImport.update({
+  id: '/admin/classes',
+  path: '/admin/classes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminDashboardRoute = AdminDashboardRouteImport.update({
+  id: '/admin/dashboard',
+  path: '/admin/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminFacultyAllocationRoute = AdminFacultyAllocationRouteImport.update({
+  id: '/admin/faculty-allocation',
+  path: '/admin/faculty-allocation',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminReportsRoute = AdminReportsRouteImport.update({
+  id: '/admin/reports',
+  path: '/admin/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminSettingsRoute = AdminSettingsRouteImport.update({
+  id: '/admin/settings',
+  path: '/admin/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminStudentsRoute = AdminStudentsRouteImport.update({
+  id: '/admin/students',
+  path: '/admin/students',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminSubjectsRoute = AdminSubjectsRouteImport.update({
+  id: '/admin/subjects',
+  path: '/admin/subjects',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminTeachersRoute = AdminTeachersRouteImport.update({
+  id: '/admin/teachers',
+  path: '/admin/teachers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StudentActivityRoute = StudentActivityRouteImport.update({
+  id: '/student/activity',
+  path: '/student/activity',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StudentCurrentSessionRoute = StudentCurrentSessionRouteImport.update({
+  id: '/student/current-session',
+  path: '/student/current-session',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StudentDashboardRoute = StudentDashboardRouteImport.update({
+  id: '/student/dashboard',
+  path: '/student/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StudentMyClassesRoute = StudentMyClassesRouteImport.update({
+  id: '/student/my-classes',
+  path: '/student/my-classes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StudentNotificationsRoute = StudentNotificationsRouteImport.update({
+  id: '/student/notifications',
+  path: '/student/notifications',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StudentPermissionsRoute = StudentPermissionsRouteImport.update({
+  id: '/student/permissions',
+  path: '/student/permissions',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StudentProfileRoute = StudentProfileRouteImport.update({
+  id: '/student/profile',
+  path: '/student/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TeacherAiReportsRoute = TeacherAiReportsRouteImport.update({
+  id: '/teacher/ai-reports',
+  path: '/teacher/ai-reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TeacherAlertsRoute = TeacherAlertsRouteImport.update({
+  id: '/teacher/alerts',
+  path: '/teacher/alerts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TeacherAttendanceRoute = TeacherAttendanceRouteImport.update({
+  id: '/teacher/attendance',
+  path: '/teacher/attendance',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TeacherClassroomControlRoute = TeacherClassroomControlRouteImport.update({
+  id: '/teacher/classroom-control',
+  path: '/teacher/classroom-control',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TeacherDashboardRoute = TeacherDashboardRouteImport.update({
+  id: '/teacher/dashboard',
+  path: '/teacher/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TeacherLiveActivityRoute = TeacherLiveActivityRouteImport.update({
+  id: '/teacher/live-activity',
+  path: '/teacher/live-activity',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TeacherMyClassesRoute = TeacherMyClassesRouteImport.update({
+  id: '/teacher/my-classes',
+  path: '/teacher/my-classes',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TeacherMyScheduleRoute = TeacherMyScheduleRouteImport.update({
+  id: '/teacher/my-schedule',
+  path: '/teacher/my-schedule',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TeacherProfileRoute = TeacherProfileRouteImport.update({
+  id: '/teacher/profile',
+  path: '/teacher/profile',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TeacherStartClassRoute = TeacherStartClassRouteImport.update({
+  id: '/teacher/start-class',
+  path: '/teacher/start-class',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/login': typeof LoginRoute
+  '/admin/analytics': typeof AdminAnalyticsRoute
+  '/admin/classes': typeof AdminClassesRoute
+  '/admin/dashboard': typeof AdminDashboardRoute
+  '/admin/faculty-allocation': typeof AdminFacultyAllocationRoute
+  '/admin/reports': typeof AdminReportsRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/admin/students': typeof AdminStudentsRoute
+  '/admin/subjects': typeof AdminSubjectsRoute
+  '/admin/teachers': typeof AdminTeachersRoute
+  '/student/activity': typeof StudentActivityRoute
+  '/student/current-session': typeof StudentCurrentSessionRoute
+  '/student/dashboard': typeof StudentDashboardRoute
+  '/student/my-classes': typeof StudentMyClassesRoute
+  '/student/notifications': typeof StudentNotificationsRoute
+  '/student/permissions': typeof StudentPermissionsRoute
+  '/student/profile': typeof StudentProfileRoute
+  '/teacher/ai-reports': typeof TeacherAiReportsRoute
+  '/teacher/alerts': typeof TeacherAlertsRoute
+  '/teacher/attendance': typeof TeacherAttendanceRoute
+  '/teacher/classroom-control': typeof TeacherClassroomControlRoute
+  '/teacher/dashboard': typeof TeacherDashboardRoute
+  '/teacher/live-activity': typeof TeacherLiveActivityRoute
+  '/teacher/my-classes': typeof TeacherMyClassesRoute
+  '/teacher/my-schedule': typeof TeacherMyScheduleRoute
+  '/teacher/profile': typeof TeacherProfileRoute
+  '/teacher/start-class': typeof TeacherStartClassRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/login': typeof LoginRoute
+  '/admin/analytics': typeof AdminAnalyticsRoute
+  '/admin/classes': typeof AdminClassesRoute
+  '/admin/dashboard': typeof AdminDashboardRoute
+  '/admin/faculty-allocation': typeof AdminFacultyAllocationRoute
+  '/admin/reports': typeof AdminReportsRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/admin/students': typeof AdminStudentsRoute
+  '/admin/subjects': typeof AdminSubjectsRoute
+  '/admin/teachers': typeof AdminTeachersRoute
+  '/student/activity': typeof StudentActivityRoute
+  '/student/current-session': typeof StudentCurrentSessionRoute
+  '/student/dashboard': typeof StudentDashboardRoute
+  '/student/my-classes': typeof StudentMyClassesRoute
+  '/student/notifications': typeof StudentNotificationsRoute
+  '/student/permissions': typeof StudentPermissionsRoute
+  '/student/profile': typeof StudentProfileRoute
+  '/teacher/ai-reports': typeof TeacherAiReportsRoute
+  '/teacher/alerts': typeof TeacherAlertsRoute
+  '/teacher/attendance': typeof TeacherAttendanceRoute
+  '/teacher/classroom-control': typeof TeacherClassroomControlRoute
+  '/teacher/dashboard': typeof TeacherDashboardRoute
+  '/teacher/live-activity': typeof TeacherLiveActivityRoute
+  '/teacher/my-classes': typeof TeacherMyClassesRoute
+  '/teacher/my-schedule': typeof TeacherMyScheduleRoute
+  '/teacher/profile': typeof TeacherProfileRoute
+  '/teacher/start-class': typeof TeacherStartClassRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/login': typeof LoginRoute
+  '/admin/analytics': typeof AdminAnalyticsRoute
+  '/admin/classes': typeof AdminClassesRoute
+  '/admin/dashboard': typeof AdminDashboardRoute
+  '/admin/faculty-allocation': typeof AdminFacultyAllocationRoute
+  '/admin/reports': typeof AdminReportsRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/admin/students': typeof AdminStudentsRoute
+  '/admin/subjects': typeof AdminSubjectsRoute
+  '/admin/teachers': typeof AdminTeachersRoute
+  '/student/activity': typeof StudentActivityRoute
+  '/student/current-session': typeof StudentCurrentSessionRoute
+  '/student/dashboard': typeof StudentDashboardRoute
+  '/student/my-classes': typeof StudentMyClassesRoute
+  '/student/notifications': typeof StudentNotificationsRoute
+  '/student/permissions': typeof StudentPermissionsRoute
+  '/student/profile': typeof StudentProfileRoute
+  '/teacher/ai-reports': typeof TeacherAiReportsRoute
+  '/teacher/alerts': typeof TeacherAlertsRoute
+  '/teacher/attendance': typeof TeacherAttendanceRoute
+  '/teacher/classroom-control': typeof TeacherClassroomControlRoute
+  '/teacher/dashboard': typeof TeacherDashboardRoute
+  '/teacher/live-activity': typeof TeacherLiveActivityRoute
+  '/teacher/my-classes': typeof TeacherMyClassesRoute
+  '/teacher/my-schedule': typeof TeacherMyScheduleRoute
+  '/teacher/profile': typeof TeacherProfileRoute
+  '/teacher/start-class': typeof TeacherStartClassRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/forgot-password'
+    | '/login'
+    | '/admin/analytics'
+    | '/admin/classes'
+    | '/admin/dashboard'
+    | '/admin/faculty-allocation'
+    | '/admin/reports'
+    | '/admin/settings'
+    | '/admin/students'
+    | '/admin/subjects'
+    | '/admin/teachers'
+    | '/student/activity'
+    | '/student/current-session'
+    | '/student/dashboard'
+    | '/student/my-classes'
+    | '/student/notifications'
+    | '/student/permissions'
+    | '/student/profile'
+    | '/teacher/ai-reports'
+    | '/teacher/alerts'
+    | '/teacher/attendance'
+    | '/teacher/classroom-control'
+    | '/teacher/dashboard'
+    | '/teacher/live-activity'
+    | '/teacher/my-classes'
+    | '/teacher/my-schedule'
+    | '/teacher/profile'
+    | '/teacher/start-class'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/forgot-password'
+    | '/login'
+    | '/admin/analytics'
+    | '/admin/classes'
+    | '/admin/dashboard'
+    | '/admin/faculty-allocation'
+    | '/admin/reports'
+    | '/admin/settings'
+    | '/admin/students'
+    | '/admin/subjects'
+    | '/admin/teachers'
+    | '/student/activity'
+    | '/student/current-session'
+    | '/student/dashboard'
+    | '/student/my-classes'
+    | '/student/notifications'
+    | '/student/permissions'
+    | '/student/profile'
+    | '/teacher/ai-reports'
+    | '/teacher/alerts'
+    | '/teacher/attendance'
+    | '/teacher/classroom-control'
+    | '/teacher/dashboard'
+    | '/teacher/live-activity'
+    | '/teacher/my-classes'
+    | '/teacher/my-schedule'
+    | '/teacher/profile'
+    | '/teacher/start-class'
+  id:
+    | '__root__'
+    | '/'
+    | '/forgot-password'
+    | '/login'
+    | '/admin/analytics'
+    | '/admin/classes'
+    | '/admin/dashboard'
+    | '/admin/faculty-allocation'
+    | '/admin/reports'
+    | '/admin/settings'
+    | '/admin/students'
+    | '/admin/subjects'
+    | '/admin/teachers'
+    | '/student/activity'
+    | '/student/current-session'
+    | '/student/dashboard'
+    | '/student/my-classes'
+    | '/student/notifications'
+    | '/student/permissions'
+    | '/student/profile'
+    | '/teacher/ai-reports'
+    | '/teacher/alerts'
+    | '/teacher/attendance'
+    | '/teacher/classroom-control'
+    | '/teacher/dashboard'
+    | '/teacher/live-activity'
+    | '/teacher/my-classes'
+    | '/teacher/my-schedule'
+    | '/teacher/profile'
+    | '/teacher/start-class'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
+  LoginRoute: typeof LoginRoute
+  AdminAnalyticsRoute: typeof AdminAnalyticsRoute
+  AdminClassesRoute: typeof AdminClassesRoute
+  AdminDashboardRoute: typeof AdminDashboardRoute
+  AdminFacultyAllocationRoute: typeof AdminFacultyAllocationRoute
+  AdminReportsRoute: typeof AdminReportsRoute
+  AdminSettingsRoute: typeof AdminSettingsRoute
+  AdminStudentsRoute: typeof AdminStudentsRoute
+  AdminSubjectsRoute: typeof AdminSubjectsRoute
+  AdminTeachersRoute: typeof AdminTeachersRoute
+  StudentActivityRoute: typeof StudentActivityRoute
+  StudentCurrentSessionRoute: typeof StudentCurrentSessionRoute
+  StudentDashboardRoute: typeof StudentDashboardRoute
+  StudentMyClassesRoute: typeof StudentMyClassesRoute
+  StudentNotificationsRoute: typeof StudentNotificationsRoute
+  StudentPermissionsRoute: typeof StudentPermissionsRoute
+  StudentProfileRoute: typeof StudentProfileRoute
+  TeacherAiReportsRoute: typeof TeacherAiReportsRoute
+  TeacherAlertsRoute: typeof TeacherAlertsRoute
+  TeacherAttendanceRoute: typeof TeacherAttendanceRoute
+  TeacherClassroomControlRoute: typeof TeacherClassroomControlRoute
+  TeacherDashboardRoute: typeof TeacherDashboardRoute
+  TeacherLiveActivityRoute: typeof TeacherLiveActivityRoute
+  TeacherMyClassesRoute: typeof TeacherMyClassesRoute
+  TeacherMyScheduleRoute: typeof TeacherMyScheduleRoute
+  TeacherProfileRoute: typeof TeacherProfileRoute
+  TeacherStartClassRoute: typeof TeacherStartClassRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +416,235 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/analytics': {
+      id: '/admin/analytics'
+      path: '/admin/analytics'
+      fullPath: '/admin/analytics'
+      preLoaderRoute: typeof AdminAnalyticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/classes': {
+      id: '/admin/classes'
+      path: '/admin/classes'
+      fullPath: '/admin/classes'
+      preLoaderRoute: typeof AdminClassesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/dashboard': {
+      id: '/admin/dashboard'
+      path: '/admin/dashboard'
+      fullPath: '/admin/dashboard'
+      preLoaderRoute: typeof AdminDashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/faculty-allocation': {
+      id: '/admin/faculty-allocation'
+      path: '/admin/faculty-allocation'
+      fullPath: '/admin/faculty-allocation'
+      preLoaderRoute: typeof AdminFacultyAllocationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/reports': {
+      id: '/admin/reports'
+      path: '/admin/reports'
+      fullPath: '/admin/reports'
+      preLoaderRoute: typeof AdminReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/settings': {
+      id: '/admin/settings'
+      path: '/admin/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AdminSettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/students': {
+      id: '/admin/students'
+      path: '/admin/students'
+      fullPath: '/admin/students'
+      preLoaderRoute: typeof AdminStudentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/subjects': {
+      id: '/admin/subjects'
+      path: '/admin/subjects'
+      fullPath: '/admin/subjects'
+      preLoaderRoute: typeof AdminSubjectsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/teachers': {
+      id: '/admin/teachers'
+      path: '/admin/teachers'
+      fullPath: '/admin/teachers'
+      preLoaderRoute: typeof AdminTeachersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/student/activity': {
+      id: '/student/activity'
+      path: '/student/activity'
+      fullPath: '/student/activity'
+      preLoaderRoute: typeof StudentActivityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/student/current-session': {
+      id: '/student/current-session'
+      path: '/student/current-session'
+      fullPath: '/student/current-session'
+      preLoaderRoute: typeof StudentCurrentSessionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/student/dashboard': {
+      id: '/student/dashboard'
+      path: '/student/dashboard'
+      fullPath: '/student/dashboard'
+      preLoaderRoute: typeof StudentDashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/student/my-classes': {
+      id: '/student/my-classes'
+      path: '/student/my-classes'
+      fullPath: '/student/my-classes'
+      preLoaderRoute: typeof StudentMyClassesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/student/notifications': {
+      id: '/student/notifications'
+      path: '/student/notifications'
+      fullPath: '/student/notifications'
+      preLoaderRoute: typeof StudentNotificationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/student/permissions': {
+      id: '/student/permissions'
+      path: '/student/permissions'
+      fullPath: '/student/permissions'
+      preLoaderRoute: typeof StudentPermissionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/student/profile': {
+      id: '/student/profile'
+      path: '/student/profile'
+      fullPath: '/student/profile'
+      preLoaderRoute: typeof StudentProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/teacher/ai-reports': {
+      id: '/teacher/ai-reports'
+      path: '/teacher/ai-reports'
+      fullPath: '/teacher/ai-reports'
+      preLoaderRoute: typeof TeacherAiReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/teacher/alerts': {
+      id: '/teacher/alerts'
+      path: '/teacher/alerts'
+      fullPath: '/teacher/alerts'
+      preLoaderRoute: typeof TeacherAlertsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/teacher/attendance': {
+      id: '/teacher/attendance'
+      path: '/teacher/attendance'
+      fullPath: '/teacher/attendance'
+      preLoaderRoute: typeof TeacherAttendanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/teacher/classroom-control': {
+      id: '/teacher/classroom-control'
+      path: '/teacher/classroom-control'
+      fullPath: '/teacher/classroom-control'
+      preLoaderRoute: typeof TeacherClassroomControlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/teacher/dashboard': {
+      id: '/teacher/dashboard'
+      path: '/teacher/dashboard'
+      fullPath: '/teacher/dashboard'
+      preLoaderRoute: typeof TeacherDashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/teacher/live-activity': {
+      id: '/teacher/live-activity'
+      path: '/teacher/live-activity'
+      fullPath: '/teacher/live-activity'
+      preLoaderRoute: typeof TeacherLiveActivityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/teacher/my-classes': {
+      id: '/teacher/my-classes'
+      path: '/teacher/my-classes'
+      fullPath: '/teacher/my-classes'
+      preLoaderRoute: typeof TeacherMyClassesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/teacher/my-schedule': {
+      id: '/teacher/my-schedule'
+      path: '/teacher/my-schedule'
+      fullPath: '/teacher/my-schedule'
+      preLoaderRoute: typeof TeacherMyScheduleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/teacher/profile': {
+      id: '/teacher/profile'
+      path: '/teacher/profile'
+      fullPath: '/teacher/profile'
+      preLoaderRoute: typeof TeacherProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/teacher/start-class': {
+      id: '/teacher/start-class'
+      path: '/teacher/start-class'
+      fullPath: '/teacher/start-class'
+      preLoaderRoute: typeof TeacherStartClassRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ForgotPasswordRoute: ForgotPasswordRoute,
+  LoginRoute: LoginRoute,
+  AdminAnalyticsRoute: AdminAnalyticsRoute,
+  AdminClassesRoute: AdminClassesRoute,
+  AdminDashboardRoute: AdminDashboardRoute,
+  AdminFacultyAllocationRoute: AdminFacultyAllocationRoute,
+  AdminReportsRoute: AdminReportsRoute,
+  AdminSettingsRoute: AdminSettingsRoute,
+  AdminStudentsRoute: AdminStudentsRoute,
+  AdminSubjectsRoute: AdminSubjectsRoute,
+  AdminTeachersRoute: AdminTeachersRoute,
+  StudentActivityRoute: StudentActivityRoute,
+  StudentCurrentSessionRoute: StudentCurrentSessionRoute,
+  StudentDashboardRoute: StudentDashboardRoute,
+  StudentMyClassesRoute: StudentMyClassesRoute,
+  StudentNotificationsRoute: StudentNotificationsRoute,
+  StudentPermissionsRoute: StudentPermissionsRoute,
+  StudentProfileRoute: StudentProfileRoute,
+  TeacherAiReportsRoute: TeacherAiReportsRoute,
+  TeacherAlertsRoute: TeacherAlertsRoute,
+  TeacherAttendanceRoute: TeacherAttendanceRoute,
+  TeacherClassroomControlRoute: TeacherClassroomControlRoute,
+  TeacherDashboardRoute: TeacherDashboardRoute,
+  TeacherLiveActivityRoute: TeacherLiveActivityRoute,
+  TeacherMyClassesRoute: TeacherMyClassesRoute,
+  TeacherMyScheduleRoute: TeacherMyScheduleRoute,
+  TeacherProfileRoute: TeacherProfileRoute,
+  TeacherStartClassRoute: TeacherStartClassRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
