@@ -1,0 +1,257 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  TEACHER
+  STUDENT
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  INVITED
+}
+
+enum SessionStatus {
+  SCHEDULED
+  ACTIVE
+  ENDED
+  CANCELLED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+model Institution {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(160)
+  timeZone  String   @default("UTC") @db.VarChar(64)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  users    User[]
+  classes  Class[]
+  subjects Subject[]
+  sessions ClassSession[]
+  auditLog AuditLog[]
+
+  @@index([name])
+}
+
+model User {
+  id           String        @id @default(uuid()) @db.Uuid
+  institutionId String?       @db.Uuid
+  email        String        @unique @db.VarChar(320)
+  firstName    String        @db.VarChar(100)
+  lastName     String        @db.VarChar(100)
+  passwordHash String        @db.VarChar(255)
+  role         UserRole
+  status       AccountStatus @default(ACTIVE)
+  createdAt    DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime      @updatedAt @db.Timestamptz(3)
+
+  institution       Institution?          @relation(fields: [institutionId], references: [id], onDelete: Restrict)
+  studentProfile    StudentProfile?
+  teacherProfile    TeacherProfile?
+  authSessions      AuthSession[]
+  passwordReset     PasswordResetToken[]
+  enrollments       ClassEnrollment[]
+  teachingClasses   ClassTeacher[]        @relation("ClassTeachers")
+  taughtSessions    ClassSession[]        @relation("SessionTeacher")
+  attendanceRecords AttendanceRecord[]    @relation("AttendanceStudent")
+  markedAttendance AttendanceRecord[]    @relation("AttendanceMarker")
+  auditEvents       AuditLog[]            @relation("AuditActor")
+
+  @@index([institutionId, role, status])
+}
+
+model StudentProfile {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model TeacherProfile {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Class {
+  id            String   @id @default(uuid()) @db.Uuid
+  institutionId String   @db.Uuid
+  name          String   @db.VarChar(120)
+  code          String?  @db.VarChar(40)
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  institution Institution       @relation(fields: [institutionId], references: [id], onDelete: Restrict)
+  enrollments ClassEnrollment[]
+  teachers    ClassTeacher[]
+  subjects    ClassSubject[]
+  sessions    ClassSession[]
+
+  @@unique([institutionId, name])
+  @@unique([institutionId, code])
+  @@index([institutionId, createdAt])
+  @@map("classes")
+}
+
+model Subject {
+  id            String   @id @default(uuid()) @db.Uuid
+  institutionId String   @db.Uuid
+  name          String   @db.VarChar(120)
+  code          String   @db.VarChar(40)
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  institution Institution    @relation(fields: [institutionId], references: [id], onDelete: Restrict)
+  classes     ClassSubject[]
+  sessions    ClassSession[]
+
+  @@unique([institutionId, code])
+  @@index([institutionId, name])
+}
+
+model ClassEnrollment {
+  id         String   @id @default(uuid()) @db.Uuid
+  classId    String   @db.Uuid
+  studentId  String   @db.Uuid
+  enrolledAt DateTime @default(now()) @db.Timestamptz(3)
+
+  class   Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+  student User  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([classId, studentId])
+  @@index([studentId, enrolledAt])
+}
+
+model ClassTeacher {
+  classId   String   @db.Uuid
+  teacherId String   @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  class   Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+  teacher User  @relation("ClassTeachers", fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@id([classId, teacherId])
+  @@index([teacherId])
+}
+
+model ClassSubject {
+  classId   String   @db.Uuid
+  subjectId String   @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  class   Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@id([classId, subjectId])
+  @@index([subjectId])
+}
+
+model ClassSession {
+  id            String        @id @default(uuid()) @db.Uuid
+  institutionId String        @db.Uuid
+  classId       String        @db.Uuid
+  teacherId     String        @db.Uuid
+  subjectId     String        @db.Uuid
+  title         String        @db.VarChar(160)
+  status        SessionStatus @default(SCHEDULED)
+  startsAt      DateTime      @db.Timestamptz(3)
+  endsAt        DateTime?     @db.Timestamptz(3)
+  timeZone      String        @db.VarChar(64)
+  createdAt     DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime      @updatedAt @db.Timestamptz(3)
+
+  institution Institution        @relation(fields: [institutionId], references: [id], onDelete: Restrict)
+  class       Class              @relation(fields: [classId], references: [id], onDelete: Restrict)
+  teacher     User               @relation("SessionTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
+  subject     Subject            @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  attendance  AttendanceRecord[]
+
+  @@index([institutionId, startsAt])
+  @@index([classId, status, startsAt])
+  @@index([teacherId, status, startsAt])
+}
+
+model AttendanceRecord {
+  id        String           @id @default(uuid()) @db.Uuid
+  sessionId String           @db.Uuid
+  studentId String           @db.Uuid
+  markedBy  String           @db.Uuid
+  status    AttendanceStatus
+  note      String?          @db.VarChar(500)
+  markedAt  DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime         @updatedAt @db.Timestamptz(3)
+
+  session ClassSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student User         @relation("AttendanceStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  marker  User         @relation("AttendanceMarker", fields: [markedBy], references: [id], onDelete: Restrict)
+
+  @@unique([sessionId, studentId])
+  @@index([studentId, markedAt])
+}
+
+model AuthSession {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique @db.VarChar(64)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  expiresAt DateTime  @db.Timestamptz(3)
+  revokedAt DateTime? @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique @db.VarChar(64)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  expiresAt DateTime  @db.Timestamptz(3)
+  usedAt    DateTime? @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model AuditLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  institutionId String?  @db.Uuid
+  actorId       String?  @db.Uuid
+  action        String   @db.VarChar(80)
+  entityType    String   @db.VarChar(80)
+  entityId      String?  @db.Uuid
+  metadata      Json?
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+
+  institution Institution? @relation(fields: [institutionId], references: [id], onDelete: SetNull)
+  actor       User?        @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([institutionId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId])
+}
