@@ -33,3 +33,9 @@ outputType = "webview"
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[deployment]
+deploymentTarget = "cloudrun"
+
+[deployment.run]
+args = ["sh", "-c", "/nix/store/6nkvia4024pms5jss3dn0lzg8xgqzsi6-package-json-runner/bin/package-json-runner --run-script /nix/store/4lj4hwbvr5w3w9m2bqfflbsnvij5fjmi-bun-1.3.6-wrapped/bin/bun --run-package-json-script /nix/store/4lj4hwbvr5w3w9m2bqfflbsnvij5fjmi-bun-1.3.6-wrapped/bin/bun run"]
