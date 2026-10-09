@@ -3,6 +3,9 @@
   "private": true,
   "sideEffects": false,
   "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "dev": "concurrently -k -n web,api \"vite dev\" \"bun run api:dev\"",
     "api:dev": "bun --watch src/api/server.ts",
@@ -11,6 +14,7 @@
     "db:migrate": "prisma migrate dev",
     "bootstrap:admin": "bun run src/api/scripts/create-super-admin.ts",
     "build": "vite build",
+    "start": "node .output/server/index.mjs",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
