@@ -1,0 +1,255 @@
+IntelliClass — Professional Backend Development Prompt
+
+Act as a senior backend engineer and SaaS software architect. Build the production-oriented backend for IntelliClass, an AI-powered classroom management platform for educational institutions.
+
+This is intended to become a commercial product used by real schools and colleges. Prioritize security, maintainability, data integrity, scalability, and clear documentation.
+
+1. Technology Stack
+
+Use:
+
+- Node.js with TypeScript
+- Express.js
+- PostgreSQL database
+- Prisma ORM
+- Zod for request validation
+- REST API architecture
+- Secure authentication with a supported authentication provider or a properly implemented session/token strategy
+- Structured logging and centralized error handling
+- Automated tests for critical functionality
+
+Use current stable, mutually compatible package versions. Do not introduce unnecessary libraries.
+
+2. Architecture
+
+Organize the backend into modular layers:
+
+- Routes
+- Controllers
+- Services
+- Database/repositories
+- Validation schemas
+- Authentication middleware
+- Authorization middleware
+- Error handling
+- Configuration
+- Tests
+
+Separate business logic from HTTP routes. Use TypeScript types and avoid duplicated code.
+
+3. User Roles
+
+Support these roles:
+
+SUPER_ADMIN
+
+- Manage institutions and authorized administrative accounts.
+
+INSTITUTION_ADMIN
+
+- Manage their institution's students, teachers, classes, subjects and schedules.
+- View institution reports and faculty allocation.
+
+TEACHER
+
+- Access assigned classes and subjects.
+- Create and manage authorized classroom sessions.
+- Record attendance.
+- Create app-restriction policies and permissions.
+- View authorized activity records and reports.
+
+STUDENT
+
+- Access their own profile, assigned classes, session status, permission requests, notifications and permitted activity records.
+
+Enforce authorization on the server for every protected endpoint. Never rely on frontend navigation or hidden buttons for security.
+
+4. Database Design
+
+Create normalized PostgreSQL models with primary keys, foreign keys, appropriate indexes, timestamps and necessary unique constraints.
+
+Include:
+
+- Institution
+- User
+- StudentProfile
+- TeacherProfile
+- Class
+- Subject
+- ClassEnrollment
+- TeachingAssignment
+- ClassSession
+- AttendanceRecord
+- ApplicationCatalog
+- RestrictionPolicy
+- StudentPermission
+- PermissionRequest
+- ActivityEvent
+- SecurityAlert
+- AIReport
+- FacultySchedule
+- SubstituteRecommendation
+- Notification
+- AuditLog
+
+Include institution IDs where needed to enforce tenant isolation.
+
+Use appropriate enums for roles, session states, restriction modes, permission states and activity event types.
+
+Document all relationships and generate migrations.
+
+5. Authentication and Security
+
+Implement:
+
+- Secure sign-in and sign-out integration.
+- Password reset through the selected authentication provider.
+- Server-side session/token validation.
+- Role-based access control.
+- Institution-level data isolation.
+- Request validation and safe error responses.
+- Rate limiting on authentication and sensitive endpoints.
+- Secure CORS configuration.
+- Helmet and appropriate HTTP security headers.
+- Secrets exclusively through environment variables.
+- Audit logs for important administrative and classroom actions.
+
+Never store plaintext passwords, expose secret keys, or return sensitive student records to unauthorized users.
+
+6. REST API Modules
+
+Implement versioned endpoints under "/api/v1".
+
+Provide APIs for:
+
+- Authentication and current-user profile
+- Institutions
+- Students
+- Teachers
+- Classes and enrollment
+- Subjects and teaching assignments
+- Classroom sessions
+- Attendance
+- Application catalog
+- Restriction policies
+- Student permission requests and approvals
+- Activity events
+- Security alerts
+- AI classroom reports
+- Faculty schedules and substitute recommendations
+- Notifications
+- Audit logs
+
+Use consistent response formats, appropriate HTTP status codes, pagination, filtering, sorting and validation.
+
+Provide an API specification using OpenAPI/Swagger.
+
+7. Classroom Session Workflow
+
+Support this workflow:
+
+1. An authorized teacher starts a session for an assigned class and subject.
+2. The system validates the teacher's assignment.
+3. Present students are recorded or confirmed.
+4. The teacher creates a restriction policy.
+5. The policy can specify block-all or selected-app restrictions.
+6. Authorized applications and individual exceptions can be recorded.
+7. A session timer and expiry timestamp are stored.
+8. Permission requests can be submitted and approved.
+9. Activity events and alerts can be recorded.
+10. The session can be ended, and a summary can be generated.
+
+Enforce valid session-state transitions and prevent unauthorized or duplicate actions.
+
+8. Important Device-Control Limitation
+
+The backend must NOT pretend it can directly block Android applications merely by storing a restriction in PostgreSQL.
+
+For this version:
+
+- Store restriction policies and desired device actions.
+- Clearly distinguish a saved policy from a policy actually enforced on a device.
+- Use explicit device-enforcement statuses such as "PENDING", "DELIVERED", "ENFORCED", "FAILED" and "EXPIRED".
+- Create an interface for a future authorized Android device-management integration.
+- Record acknowledgements from authenticated devices.
+- Never mark a policy as enforced without trustworthy device acknowledgement.
+
+Do not implement covert surveillance, unauthorized device control, or silent-mode overrides.
+
+9. AI Module
+
+Create an AI service abstraction that can later connect to an external AI provider through environment-based configuration.
+
+Support:
+
+- Summarizing recorded classroom activity.
+- Identifying repeated recorded restriction attempts.
+- Generating teacher-friendly session reports.
+- Producing explainable substitute-faculty recommendations from availability, subject expertise, timetable conflicts and workload.
+
+AI must use authorized, relevant data only. Do not fabricate activity records, student behavior, attendance or enforcement results.
+
+Keep AI provider calls separate from the core application logic. Validate outputs and handle unavailable providers gracefully.
+
+AI reports must be labeled as generated insights and should not make consequential disciplinary or administrative decisions autonomously.
+
+10. Timer and Background Processing
+
+Implement reliable session-expiry processing.
+
+Do not rely solely on an in-memory JavaScript timer. Persist expiry times and use a suitable scheduler or background-job mechanism so the system can recover after a server restart.
+
+Make repeated job execution safe and idempotent.
+
+11. Reliability and Testing
+
+Add:
+
+- Unit tests for core business rules.
+- Integration tests for authentication and authorization.
+- Tests for institution data isolation.
+- Tests for attendance and session workflows.
+- Tests for permission approval and session expiry.
+- Tests for invalid input and unauthorized access.
+- Database migration instructions.
+- A health endpoint at "/health".
+
+Use safe database transactions where operations involve multiple related records.
+
+12. Configuration and Documentation
+
+Create:
+
+- ".env.example" containing variable names and placeholders only.
+- A clear README.
+- Database setup and migration instructions.
+- Local development instructions.
+- API documentation.
+- Test and build commands.
+- Deployment configuration appropriate to the selected Replit environment.
+
+Never commit actual credentials or API keys.
+
+13. Development Process
+
+Build in phases:
+
+Phase 1: Project setup, database schema, migrations and health endpoint.
+
+Phase 2: Authentication, authorization and institution isolation.
+
+Phase 3: Students, teachers, classes, subjects and enrollment.
+
+Phase 4: Classroom sessions, attendance, restriction policies and permissions.
+
+Phase 5: Activity events, alerts, audit logs and reliable expiry processing.
+
+Phase 6: AI reporting and faculty recommendations.
+
+Phase 7: Tests, documentation and deployment preparation.
+
+Start with Phase 1 and implement it completely before moving forward. Report which files were created, which environment variables are required, which migrations have run, which tests passed, and any unfinished work.
+
+Do not claim that an integration, migration, test, or deployment succeeded unless you have verified it.
+
+The final backend must be structured to integrate with the separate IntelliClass React/TypeScript frontend through documented REST APIs.
