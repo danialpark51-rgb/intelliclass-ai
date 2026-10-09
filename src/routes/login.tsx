@@ -5,4 +5,4 @@ export const Route = createFileRoute('/login')({
  head: () => pageMeta('Log in', 'Log in to your IntelliClass institution workspace.'),
  component: Page,
 });
-function Page() { return <AuthPage forgot=false/>; }
+function Page() { return <AuthPage forgot={false}/>; }
