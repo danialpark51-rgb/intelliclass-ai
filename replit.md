@@ -14,7 +14,7 @@
 - Run `bun run db:generate` and `bun run db:migrate` to generate the Prisma client and apply development migrations.
 - No default account is created. Set `SUPER_ADMIN_EMAIL` and `SUPER_ADMIN_PASSWORD` in Replit Secrets, run `bun run bootstrap:admin`, then remove those bootstrap secrets.
 - Password-reset delivery is unavailable until an email provider is configured.
-- Production CORS requires an explicit `FRONTEND_ORIGIN`; use secure cookies and HTTPS for deployed services. Vite's `/api` proxy is development-only.
+- In production, the API binds to loopback and the TanStack server forwards same-origin `/api/*` requests to it. Same-origin requests are checked against the forwarded browser origin; set `FRONTEND_ORIGIN` only for additional, intentionally supported frontend origins. Production cookies require HTTPS. Vite's `/api` proxy is development-only.
 
 ## Checks
 

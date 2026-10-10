@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { ArrowLeft, ArrowRight, Pencil, Plus, RefreshCw, Trash2, Users } from "lucide-react";
+import { ArrowLeft, ArrowRight, Eye, Pencil, Plus, RefreshCw, Trash2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ApiRequestError, useAuth } from "./auth-provider";
 import { DataTable, EmptyState, Field, LoadingState, Panel, StatusBadge } from "./shared";
@@ -82,6 +82,8 @@ export function ConnectedDirectory({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState<UserRecord | ClassRecord | SubjectRecord | null>(null);
+  const [viewing, setViewing] = useState<UserRecord | ClassRecord | null>(null);
+  const [viewLoadingId, setViewLoadingId] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     firstName: "",
@@ -214,9 +216,23 @@ export function ConnectedDirectory({
     setShowForm(true);
   }
 
-  function updateList() {
+  async function openDetails(record: UserRecord | ClassRecord) {
+    const endpoint = isClassDirectory ? "classes" : userRole === "STUDENT" ? "students" : "teachers";
+    setViewLoadingId(record.id);
+    setError("");
+    try {
+      const result = await requestJson<{ data: UserRecord | ClassRecord }>(`${endpoint}/${record.id}`);
+      setViewing(result.data);
+    } catch (cause) {
+      setError(getError(cause));
+    } finally {
+      setViewLoadingId("");
+    }
+  }
+
+  function updateList(preserveNotice = false) {
     setPageNumber(1);
-    setNotice("");
+    if (!preserveNotice) setNotice("");
     setError("");
     // Refreshing by changing the page state is insufficient when already on page one.
     void requestJson<Page<UserRecord | ClassRecord | SubjectRecord>>(
@@ -279,7 +295,7 @@ export function ConnectedDirectory({
       setShowForm(false);
       setEditing(null);
       setNotice(`${title.slice(0, -1)} ${editing ? "updated" : "created"}.`);
-      updateList();
+      updateList(true);
     } catch (cause) {
       setError(getError(cause));
     } finally {
@@ -296,8 +312,8 @@ export function ConnectedDirectory({
     try {
       const endpoint = isClassDirectory ? "classes" : isSubjectDirectory ? "subjects" : userRole === "STUDENT" ? "students" : "teachers";
       await requestJson(`${endpoint}/${record.id}`, { method: "DELETE" });
-      setNotice("The record was removed.");
-      updateList();
+      setNotice("email" in record ? "The account was deactivated." : "The record was deleted.");
+      updateList(true);
     } catch (cause) {
       setError(getError(cause));
     }
@@ -331,7 +347,7 @@ export function ConnectedDirectory({
       <Panel
         title={`${title} directory`}
         subtitle={`${total} record${total === 1 ? "" : "s"}${!isAdmin ? " assigned to your account" : ""}`}
-        action={<Button size="sm" variant="outline" onClick={updateList} aria-label="Refresh directory"><RefreshCw size={15}/>Refresh</Button>}
+        action={<Button size="sm" variant="outline" onClick={() => updateList()} aria-label="Refresh directory"><RefreshCw size={15}/>Refresh</Button>}
       >
         {institutionSelector}
         {loading ? <LoadingState/> : records.length === 0 ? (
@@ -343,13 +359,16 @@ export function ConnectedDirectory({
             {canCreate && <Button onClick={beginCreate}><Plus size={15}/>Add the first record</Button>}
           </EmptyState>
         ) : isClassDirectory ? (
-          <DataTable headers={["Class", "Teachers", "Subjects", "Students", "Sessions", ...(canCreate ? ["Actions"] : [])]}>
+          <DataTable headers={["Class", "Teachers", "Subjects", "Students", "Sessions", "Actions"]}>
             {(records as ClassRecord[]).map((record) => (
               <tr key={record.id}>
                 <td><strong>{record.name}</strong><div className="text-xs text-muted-foreground">{record.code || "No class code"}</div></td>
                 <td>{record.teachers.length}</td><td>{record.subjects.length}</td>
                 <td>{record._count.enrollments}</td><td>{record._count.sessions}</td>
-                {canCreate && <td className="flex gap-2"><Button size="sm" variant="outline" onClick={() => beginEdit(record)} aria-label={`Edit ${record.name}`}><Pencil size={14}/></Button><Button size="sm" variant="outline" onClick={() => void deactivate(record)} aria-label={`Delete ${record.name}`}><Trash2 size={14}/></Button></td>}
+                <td className="flex gap-2">
+                  <Button size="sm" variant="outline" disabled={viewLoadingId === record.id} onClick={() => void openDetails(record)} aria-label={`View ${record.name}`}><Eye size={14}/></Button>
+                  {canCreate && <><Button size="sm" variant="outline" onClick={() => beginEdit(record)} aria-label={`Edit ${record.name}`}><Pencil size={14}/></Button><Button size="sm" variant="outline" onClick={() => void deactivate(record)} aria-label={`Delete ${record.name}`}><Trash2 size={14}/></Button></>}
+                </td>
               </tr>
             ))}
           </DataTable>
@@ -362,16 +381,46 @@ export function ConnectedDirectory({
             ))}
           </DataTable>
         ) : (
-          <DataTable headers={["Name", "Email", "Status", ...(canCreate ? ["Actions"] : [])]}>
+          <DataTable headers={["Name", "Email", "Status", "Actions"]}>
             {(records as UserRecord[]).map((record) => (
               <tr key={record.id}><td><strong>{record.firstName} {record.lastName}</strong></td><td>{record.email}</td><td><StatusBadge tone={record.status === "ACTIVE" ? "success" : "warning"}>{record.status}</StatusBadge></td>
-                {canCreate && <td className="flex gap-2"><Button size="sm" variant="outline" onClick={() => beginEdit(record)} aria-label={`Edit ${record.firstName} ${record.lastName}`}><Pencil size={14}/></Button>{record.status === "ACTIVE" && <Button size="sm" variant="outline" onClick={() => void deactivate(record)} aria-label={`Deactivate ${record.firstName} ${record.lastName}`}><Trash2 size={14}/></Button>}</td>}
+                <td className="flex gap-2">
+                  <Button size="sm" variant="outline" disabled={viewLoadingId === record.id} onClick={() => void openDetails(record)} aria-label={`View ${record.firstName} ${record.lastName}`}><Eye size={14}/></Button>
+                  {canCreate && <><Button size="sm" variant="outline" onClick={() => beginEdit(record)} aria-label={`Edit ${record.firstName} ${record.lastName}`}><Pencil size={14}/></Button>{record.status === "ACTIVE" && <Button size="sm" variant="outline" onClick={() => void deactivate(record)} aria-label={`Deactivate ${record.firstName} ${record.lastName}`}><Trash2 size={14}/></Button>}</>}
+                </td>
               </tr>
             ))}
           </DataTable>
         )}
         {totalPages > 1 && <div className="flex items-center justify-end gap-2 p-4"><span className="text-sm text-muted-foreground">Page {pageNumber} of {totalPages}</span><Button size="sm" variant="outline" disabled={pageNumber <= 1} onClick={() => setPageNumber(pageNumber - 1)}><ArrowLeft size={14}/>Previous</Button><Button size="sm" variant="outline" disabled={pageNumber >= totalPages} onClick={() => setPageNumber(pageNumber + 1)}>Next<ArrowRight size={14}/></Button></div>}
       </Panel>
+      {viewing && (
+        <Panel
+          title={"email" in viewing ? `${viewing.firstName} ${viewing.lastName}` : viewing.name}
+          subtitle={"email" in viewing ? "Account details loaded from the institution database." : "Class details loaded from the institution database."}
+          action={<Button size="sm" variant="outline" onClick={() => setViewing(null)}>Close</Button>}
+        >
+          <dl className="grid gap-4 p-4 sm:grid-cols-2">
+            {"email" in viewing ? (
+              <>
+                <div><dt className="text-sm text-muted-foreground">Email</dt><dd className="font-medium">{viewing.email}</dd></div>
+                <div><dt className="text-sm text-muted-foreground">Role</dt><dd className="font-medium">{viewing.role}</dd></div>
+                <div><dt className="text-sm text-muted-foreground">Status</dt><dd className="font-medium">{viewing.status}</dd></div>
+                <div><dt className="text-sm text-muted-foreground">Account ID</dt><dd className="break-all font-medium">{viewing.id}</dd></div>
+              </>
+            ) : (
+              <>
+                <div><dt className="text-sm text-muted-foreground">Class code</dt><dd className="font-medium">{viewing.code || "Not set"}</dd></div>
+                <div><dt className="text-sm text-muted-foreground">Assigned teachers</dt><dd className="font-medium">{viewing.teachers.length}</dd></div>
+                <div><dt className="text-sm text-muted-foreground">Subjects</dt><dd className="font-medium">{viewing.subjects.length}</dd></div>
+                <div><dt className="text-sm text-muted-foreground">Enrolled students</dt><dd className="font-medium">{viewing._count.enrollments}</dd></div>
+                <div><dt className="text-sm text-muted-foreground">Sessions</dt><dd className="font-medium">{viewing._count.sessions}</dd></div>
+                <div><dt className="text-sm text-muted-foreground">Class ID</dt><dd className="break-all font-medium">{viewing.id}</dd></div>
+              </>
+            )}
+          </dl>
+        </Panel>
+      )}
       {showForm && <Panel title={`${editing ? "Edit" : "Add"} ${title.slice(0, -1)}`} subtitle={isUserDirectory ? editing ? "Update account details. Deactivation is available from the directory." : "Set an initial password and share it through a secure channel." : "Changes are saved to the institution database."}>
         <form className="grid gap-4 p-4 md:grid-cols-2" onSubmit={submit}>
           {isUserDirectory ? <>

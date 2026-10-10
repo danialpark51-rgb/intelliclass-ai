@@ -1,2 +1,3 @@
 - [Prisma OpenSSL runtime](prisma-openssl-runtime.md) — the API may need the Nix `openssl` package for Prisma's native query engine.
 - [Bun transitive overrides](bun-transitive-overrides.md) — keep major-sensitive security pins scoped; a global brace-expansion pin breaks older minimatch consumers.
+- [Bun production runtime](bun-production-runtime.md) — the Node module still left `node` missing in this workspace; smoke-test the SSR server with Bun.

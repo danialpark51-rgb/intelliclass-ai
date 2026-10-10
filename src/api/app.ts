@@ -18,6 +18,39 @@ import { createSubjectRouter } from "./modules/subjects/router";
 import { createSessionRouter } from "./modules/sessions/router";
 import { createDashboardRouter } from "./modules/dashboard/router";
 
+function isTrustedSameOriginProxyRequest(request: import("express").Request, origin: string) {
+  const remoteAddress = request.socket.remoteAddress;
+  if (
+    remoteAddress !== "127.0.0.1" &&
+    remoteAddress !== "::1" &&
+    remoteAddress !== "::ffff:127.0.0.1"
+  ) {
+    return false;
+  }
+
+  const forwardedHost = request.get("x-forwarded-host");
+  const forwardedProtocol = request.get("x-forwarded-proto");
+  if (
+    !forwardedHost ||
+    forwardedHost.includes(",") ||
+    !forwardedProtocol ||
+    forwardedProtocol.includes(",")
+  ) {
+    return false;
+  }
+
+  try {
+    const requestOrigin = new URL(origin);
+    const trustedOrigin = new URL(`${forwardedProtocol}://${forwardedHost}`);
+    return (
+      ["http:", "https:"].includes(trustedOrigin.protocol) &&
+      requestOrigin.origin === trustedOrigin.origin
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function createApiApp(database: PrismaClient, config: ApiConfig) {
   const app = express();
   const logger = pino({
@@ -46,31 +79,29 @@ export function createApiApp(database: PrismaClient, config: ApiConfig) {
     }),
   );
 
-  app.use(
-    cors({
-      credentials: true,
-      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-      allowedHeaders: ["Authorization", "Content-Type", "Idempotency-Key"],
-      origin(origin, callback) {
-        if (!origin) {
-          callback(null, true);
-          return;
-        }
-        if (config.frontendOrigins.includes(origin)) {
-          callback(null, true);
-          return;
-        }
-        if (
-          config.nodeEnv !== "production" &&
-          /^https:\/\/[a-z0-9-]+\.replit\.dev$/i.test(origin)
-        ) {
-          callback(null, true);
-          return;
-        }
-        callback(new ApiError(403, "CORS_ORIGIN_DENIED", "This origin is not allowed"));
-      },
-    }),
-  );
+  const corsOptions = {
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Authorization", "Content-Type", "Idempotency-Key"],
+  };
+  app.use((request, response, next) => {
+    const origin = request.header("origin");
+    if (!origin) {
+      next();
+      return;
+    }
+
+    const allowed =
+      config.frontendOrigins.includes(origin) ||
+      (config.nodeEnv !== "production" && /^https:\/\/[a-z0-9-]+\.replit\.dev$/i.test(origin)) ||
+      (config.nodeEnv === "production" && isTrustedSameOriginProxyRequest(request, origin));
+    if (!allowed) {
+      next(new ApiError(403, "CORS_ORIGIN_DENIED", "This origin is not allowed"));
+      return;
+    }
+
+    cors({ ...corsOptions, origin })(request, response, next);
+  });
   app.use(helmet());
   app.use(express.json({ limit: "100kb", strict: true }));
 

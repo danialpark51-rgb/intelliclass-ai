@@ -5,7 +5,7 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   SESSION_SECRET: z.string().min(32, "SESSION_SECRET must contain at least 32 characters"),
   API_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
-  API_HOST: z.string().default("0.0.0.0"),
+  API_HOST: z.string().trim().min(1).optional(),
   FRONTEND_ORIGIN: z.string().optional(),
   COOKIE_SECURE: z.enum(["true", "false"]).optional(),
   COOKIE_SAME_SITE: z.enum(["strict", "lax", "none"]).default("lax"),
@@ -30,10 +30,6 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): ApiConfig {
   }
 
   const values = parsed.data;
-  if (values.NODE_ENV === "production" && !values.FRONTEND_ORIGIN?.trim()) {
-    throw new Error("FRONTEND_ORIGIN must be set in production");
-  }
-
   const frontendOrigins = values.FRONTEND_ORIGIN?.split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
@@ -61,7 +57,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): ApiConfig {
     databaseUrl: values.DATABASE_URL,
     sessionSecret: values.SESSION_SECRET,
     port: values.API_PORT,
-    host: values.API_HOST,
+    host: values.API_HOST ?? (values.NODE_ENV === "production" ? "127.0.0.1" : "0.0.0.0"),
     frontendOrigins:
       frontendOrigins ??
       (values.NODE_ENV === "development" ? ["http://localhost:5000", "http://127.0.0.1:5000"] : []),

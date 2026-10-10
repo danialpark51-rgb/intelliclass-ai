@@ -1,4 +1,4 @@
-modules = ["nodejs-20"]
+modules = ["bun-1.3", "nodejs-22", "postgresql-16"]
 
 [nix]
 channel = "stable-25_05"
@@ -45,5 +45,5 @@ externalPort = 80
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["npm", "run", "start"]
-build = ["npm", "run", "build"]
+run = ["bun", "run", "start"]
+build = ["bun", "run", "build"]

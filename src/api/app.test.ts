@@ -6,7 +6,7 @@ import supertest from "supertest";
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApiApp } from "./app";
-import type { ApiConfig } from "./config/env";
+import { loadConfig, type ApiConfig } from "./config/env";
 import { createAccessToken } from "./middleware/authenticate";
 
 const config: ApiConfig = {
@@ -98,6 +98,46 @@ describe("IntelliClass API", () => {
   beforeEach(() => {
     database = makeDatabase();
     app = createApiApp(database.database, config);
+  });
+
+  it("uses a loopback API host and secure cookies for production without a guessed frontend origin", () => {
+    const productionConfig = loadConfig({
+      NODE_ENV: "production",
+      DATABASE_URL: "postgresql://test.invalid/test",
+      SESSION_SECRET: "this-is-a-test-only-signing-secret-at-least-32",
+    });
+
+    expect(productionConfig.host).toBe("127.0.0.1");
+    expect(productionConfig.frontendOrigins).toEqual([]);
+    expect(productionConfig.cookieSecure).toBe(true);
+  });
+
+  it("allows only the trusted same-origin production proxy and rejects other origins", async () => {
+    const productionApp = createApiApp(database.database, {
+      ...config,
+      nodeEnv: "production",
+      frontendOrigins: [],
+      cookieSecure: true,
+    });
+
+    const allowed = await supertest(productionApp)
+      .options("/api/v1/auth/login")
+      .set("Origin", "https://campus.example")
+      .set("x-forwarded-host", "campus.example")
+      .set("x-forwarded-proto", "https")
+      .set("Access-Control-Request-Method", "POST")
+      .set("Access-Control-Request-Headers", "content-type")
+      .expect(204);
+    expect(allowed.headers["access-control-allow-origin"]).toBe("https://campus.example");
+
+    await supertest(productionApp)
+      .options("/api/v1/auth/login")
+      .set("Origin", "https://attacker.example")
+      .set("x-forwarded-host", "campus.example")
+      .set("x-forwarded-proto", "https")
+      .set("Access-Control-Request-Method", "POST")
+      .set("Access-Control-Request-Headers", "content-type")
+      .expect(403);
   });
 
   it("reports API and PostgreSQL health without leaking connection details", async () => {
