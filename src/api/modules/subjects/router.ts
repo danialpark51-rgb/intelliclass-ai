@@ -23,6 +23,13 @@ const createSubjectSchema = z.object({
     .transform((code) => code.toUpperCase()),
 });
 
+const updateSubjectSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    code: z.string().trim().min(1).max(40).transform((code) => code.toUpperCase()).optional(),
+  })
+  .refine((input) => Object.keys(input).length > 0);
+
 export function createSubjectRouter(database: PrismaClient) {
   const router = Router();
 
@@ -34,6 +41,8 @@ export function createSubjectRouter(database: PrismaClient) {
         ? query.institutionId
           ? { institutionId: query.institutionId }
           : {}
+        : auth.role === UserRole.INSTITUTION_ADMIN
+          ? { institutionId: requireInstitutionId(auth) }
         : {
             institutionId: requireInstitutionId(auth),
             classes: {
@@ -61,9 +70,14 @@ export function createSubjectRouter(database: PrismaClient) {
     });
   });
 
-  router.post("/", requireRoles(UserRole.SUPER_ADMIN), async (request, response) => {
+  router.post("/", requireRoles(UserRole.SUPER_ADMIN, UserRole.INSTITUTION_ADMIN), async (request, response) => {
     const input = createSubjectSchema.parse(request.body);
-    const institutionId = input.institutionId;
+    const actor = currentAuth(response);
+    const institutionId =
+      actor.role === UserRole.SUPER_ADMIN ? input.institutionId : requireInstitutionId(actor);
+    if (institutionId !== input.institutionId) {
+      throw new ApiError(403, "FORBIDDEN", "You can only manage subjects in your institution");
+    }
     const institution = await database.institution.findUnique({
       where: { id: institutionId },
       select: { id: true },
@@ -71,7 +85,6 @@ export function createSubjectRouter(database: PrismaClient) {
     if (!institution) {
       throw new ApiError(404, "INSTITUTION_NOT_FOUND", "The institution was not found");
     }
-    const actor = currentAuth(response);
     const subject = await database.$transaction(async (transaction) => {
       const created = await transaction.subject.create({
         data: {
@@ -92,6 +105,79 @@ export function createSubjectRouter(database: PrismaClient) {
     });
     response.status(201).json({ data: subject });
   });
+
+  router.patch(
+    "/:id",
+    requireRoles(UserRole.SUPER_ADMIN, UserRole.INSTITUTION_ADMIN),
+    async (request, response) => {
+      const id = z.string().uuid().parse(request.params["id"]);
+      const input = updateSubjectSchema.parse(request.body);
+      const actor = currentAuth(response);
+      const existing = await database.subject.findFirst({
+        where: {
+          id,
+          ...(actor.role === UserRole.INSTITUTION_ADMIN
+            ? { institutionId: requireInstitutionId(actor) }
+            : {}),
+        },
+        select: { id: true, institutionId: true },
+      });
+      if (!existing) throw new ApiError(404, "SUBJECT_NOT_FOUND", "The subject was not found");
+      const subject = await database.$transaction(async (transaction) => {
+        const updated = await transaction.subject.update({
+          where: { id },
+          data: {
+            ...(input.name !== undefined ? { name: input.name } : {}),
+            ...(input.code !== undefined ? { code: input.code } : {}),
+          },
+          select: { id: true, institutionId: true, name: true, code: true, createdAt: true },
+        });
+        await writeAuditLog(transaction, {
+          institutionId: existing.institutionId,
+          actorId: actor.userId,
+          action: "subject.updated",
+          entityType: "Subject",
+          entityId: id,
+          metadata: { changedFields: Object.keys(input) },
+        });
+        return updated;
+      });
+      response.json({ data: subject });
+    },
+  );
+
+  router.delete(
+    "/:id",
+    requireRoles(UserRole.SUPER_ADMIN, UserRole.INSTITUTION_ADMIN),
+    async (request, response) => {
+      const id = z.string().uuid().parse(request.params["id"]);
+      const actor = currentAuth(response);
+      const existing = await database.subject.findFirst({
+        where: {
+          id,
+          ...(actor.role === UserRole.INSTITUTION_ADMIN
+            ? { institutionId: requireInstitutionId(actor) }
+            : {}),
+        },
+        select: { id: true, institutionId: true, _count: { select: { sessions: true } } },
+      });
+      if (!existing) throw new ApiError(404, "SUBJECT_NOT_FOUND", "The subject was not found");
+      if (existing._count.sessions > 0) {
+        throw new ApiError(409, "SUBJECT_HAS_SESSIONS", "A subject with recorded sessions cannot be deleted");
+      }
+      await database.$transaction(async (transaction) => {
+        await transaction.subject.delete({ where: { id } });
+        await writeAuditLog(transaction, {
+          institutionId: existing.institutionId,
+          actorId: actor.userId,
+          action: "subject.deleted",
+          entityType: "Subject",
+          entityId: id,
+        });
+      });
+      response.status(204).end();
+    },
+  );
 
   return router;
 }

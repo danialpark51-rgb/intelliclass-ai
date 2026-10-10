@@ -1,0 +1,96 @@
+INTELLICLASS — BACKEND AUDIT AND FRONTEND INTEGRATION
+
+Act as a senior full-stack engineer taking over an existing SaaS application.
+
+Live application:
+https://intelliclass-ai--amitnagareddi97.replit.app/
+
+The application already has a public landing page, login page, Admin Dashboard, Teacher Dashboard, and administrative pages for students, teachers, classes, subjects, faculty allocation, analytics, reports, and settings.
+
+Current observed issues:
+
+- Admin Dashboard displays illustrative/sample metrics.
+- Students, Teachers, and Classes pages display "Not connected" and zero records.
+- Teacher Dashboard also displays illustrative/sample metrics.
+- The login page displays Admin, Teacher, and Student workspace links, but actual authentication has not been verified.
+
+Phase 1: Inspect before modifying
+
+1. Inspect the complete existing repository.
+2. Identify the frontend framework, backend framework, API routes, database, ORM, authentication system, and deployment configuration.
+3. Determine whether a working backend and database already exist.
+4. Identify which pages use hardcoded data, mock data, API calls, or database queries.
+5. Check whether the application currently builds and starts successfully.
+6. Identify existing security weaknesses and broken routes.
+7. Produce a concise audit report listing verified facts, missing components, and the recommended next steps.
+
+Do not guess about existing functionality.
+
+Phase 2: Preserve the application
+
+- Do not rebuild the application from scratch.
+- Do not replace the current design or remove existing pages.
+- Preserve the existing branding, navigation, layout, and reusable components.
+- Do not overwrite working code unnecessarily.
+- Do not delete existing database data or run destructive migrations.
+
+Phase 3: Implement the real data foundation
+
+After the audit, implement the smallest safe set of changes needed to connect the existing UI to a real persistent data source.
+
+The system should support:
+
+- Institutions
+- Users and roles
+- Students
+- Teachers
+- Classes
+- Subjects
+- Class enrollments
+- Classroom sessions
+- Attendance records
+
+Use the existing database and framework if they are suitable. If no database exists, propose and configure an appropriate persistent database with a documented schema and migrations.
+
+Use validated APIs and server-side authorization. Enforce institution-level data isolation.
+
+Phase 4: Remove misleading mock-data behavior
+
+- Do not display sample figures as real institutional statistics.
+- Use real database queries for metrics.
+- Show clear loading, empty, error, and success states.
+- Label any intentionally seeded demo data as demo data.
+- Connect Students, Teachers, and Classes pages to real CRUD operations.
+- Make Add, Edit, View, and Delete actions functional where authorized.
+- Validate input and confirm destructive actions.
+- Ensure changes persist after refreshing the page.
+
+Phase 5: Authentication
+
+Inspect the existing login implementation first.
+
+If authentication is missing, implement a secure authentication system with password hashing, session/token management, password-reset handling, and role-based access control.
+
+Do not make role selection on the login page a way to grant privileges. The server must determine the authenticated user's actual role.
+
+Do not expose secrets or database credentials in frontend code.
+
+Phase 6: Verification
+
+Run the application and relevant automated tests.
+
+Verify:
+
+- Application startup
+- Database connectivity
+- Login and protected routes
+- Admin/teacher/student authorization
+- Student, teacher, and class creation
+- Persistence after refresh
+- Rejection of unauthorized access
+- Institution-level data isolation
+- Correct empty states when no data exists
+
+Report exactly what works, what failed, and what remains incomplete.
+
+Start with the audit and report your findings before making major architectural changes. Do not claim a feature is implemented unless it has been verified.

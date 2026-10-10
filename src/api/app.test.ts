@@ -159,6 +159,137 @@ describe("IntelliClass API", () => {
     expect(database.delegates["class"].create).not.toHaveBeenCalled();
   });
 
+  it("returns institution-scoped, database-backed dashboard metrics", async () => {
+    const identity = await authorize(database.delegates, UserRole.INSTITUTION_ADMIN);
+    database.delegates["institution"].findUnique.mockResolvedValue({ timeZone: "Asia/Kolkata" });
+    database.delegates["user"].count
+      .mockResolvedValueOnce(12)
+      .mockResolvedValueOnce(4);
+    database.delegates["class"].count.mockResolvedValue(5);
+    database.delegates["classSession"].count.mockResolvedValue(3);
+    database.delegates["attendanceRecord"].count
+      .mockResolvedValueOnce(5)
+      .mockResolvedValueOnce(3);
+
+    const response = await supertest(app)
+      .get("/api/v1/dashboard/summary")
+      .set("Authorization", `Bearer ${identity.token}`)
+      .expect(200);
+
+    expect(response.body.data).toMatchObject({
+      scope: "institution",
+      timeZone: "Asia/Kolkata",
+      metrics: {
+        students: 12,
+        teachers: 4,
+        classes: 5,
+        sessionsToday: 3,
+        attendancePresent: 3,
+        attendanceTotal: 5,
+        attendancePercent: 60,
+      },
+    });
+    expect(database.delegates["class"].count).toHaveBeenCalledWith({
+      where: { institutionId: identity.institutionId },
+    });
+    expect(database.delegates["classSession"].count).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          institutionId: identity.institutionId,
+          startsAt: { gte: expect.any(Date), lt: expect.any(Date) },
+        }),
+      }),
+    );
+  });
+
+  it("prevents an institution administrator from selecting another institution's dashboard", async () => {
+    const identity = await authorize(database.delegates, UserRole.INSTITUTION_ADMIN);
+    await supertest(app)
+      .get(`/api/v1/dashboard/summary?institutionId=${randomUUID()}`)
+      .set("Authorization", `Bearer ${identity.token}`)
+      .expect(403);
+    expect(database.delegates["class"].count).not.toHaveBeenCalled();
+  });
+
+  it("scopes an institution administrator's student directory to their tenant", async () => {
+    const identity = await authorize(database.delegates, UserRole.INSTITUTION_ADMIN);
+    database.delegates["user"].findMany.mockResolvedValue([]);
+    database.delegates["user"].count.mockResolvedValue(0);
+
+    await supertest(app)
+      .get("/api/v1/students")
+      .set("Authorization", `Bearer ${identity.token}`)
+      .expect(200);
+
+    expect(database.delegates["user"].findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { institutionId: identity.institutionId, role: UserRole.STUDENT },
+      }),
+    );
+  });
+
+  it("rejects an institution administrator's cross-tenant user query", async () => {
+    const identity = await authorize(database.delegates, UserRole.INSTITUTION_ADMIN);
+    await supertest(app)
+      .get(`/api/v1/students?institutionId=${randomUUID()}`)
+      .set("Authorization", `Bearer ${identity.token}`)
+      .expect(403);
+    expect(database.delegates["user"].findMany).not.toHaveBeenCalled();
+  });
+
+  it("allows only a Super Admin to provision institution administrators", async () => {
+    const otherAdmin = await authorize(database.delegates, UserRole.INSTITUTION_ADMIN);
+    await supertest(app)
+      .post("/api/v1/users")
+      .set("Authorization", `Bearer ${otherAdmin.token}`)
+      .send({
+        institutionId: otherAdmin.institutionId,
+        role: UserRole.INSTITUTION_ADMIN,
+        email: "admin@example.edu",
+        firstName: "Institution",
+        lastName: "Admin",
+        password: "Secure-Test-Password-2026",
+      })
+      .expect(403);
+    expect(database.delegates["user"].create).not.toHaveBeenCalled();
+
+    const superAdmin = await authorize(database.delegates, UserRole.SUPER_ADMIN, null);
+    const institutionId = randomUUID();
+    const userId = randomUUID();
+    database.delegates["institution"].findUnique.mockResolvedValue({ id: institutionId });
+    database.delegates["user"].create.mockResolvedValue({
+      id: userId,
+      institutionId,
+      email: "admin@example.edu",
+      firstName: "Institution",
+      lastName: "Admin",
+      role: UserRole.INSTITUTION_ADMIN,
+      status: AccountStatus.ACTIVE,
+    });
+    database.delegates["auditLog"].create.mockResolvedValue({ id: randomUUID() });
+
+    const response = await supertest(app)
+      .post("/api/v1/users")
+      .set("Authorization", `Bearer ${superAdmin.token}`)
+      .send({
+        institutionId,
+        role: UserRole.INSTITUTION_ADMIN,
+        email: "admin@example.edu",
+        firstName: "Institution",
+        lastName: "Admin",
+        password: "Secure-Test-Password-2026",
+      })
+      .expect(201);
+
+    expect(response.body.data.role).toBe(UserRole.INSTITUTION_ADMIN);
+    expect(JSON.stringify(response.body)).not.toContain("passwordHash");
+    expect(database.delegates["user"].create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.not.objectContaining({ teacherProfile: expect.anything(), studentProfile: expect.anything() }),
+      }),
+    );
+  });
+
   it("scopes teacher class lookup to the teacher's own institution and assignment", async () => {
     const identity = await authorize(database.delegates, UserRole.TEACHER);
     const classId = randomUUID();

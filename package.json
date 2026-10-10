@@ -14,7 +14,7 @@
     "db:migrate": "prisma migrate dev",
     "bootstrap:admin": "bun run src/api/scripts/create-super-admin.ts",
     "build": "vite build",
-    "start": "node .output/server/index.mjs",
+    "start": "concurrently -k -s first -n web,api \"node .output/server/index.mjs\" \"bun run api:start\"",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",

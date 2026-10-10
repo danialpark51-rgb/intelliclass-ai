@@ -16,6 +16,7 @@ import { createUserRouter } from "./modules/users/router";
 import { createClassRouter } from "./modules/classes/router";
 import { createSubjectRouter } from "./modules/subjects/router";
 import { createSessionRouter } from "./modules/sessions/router";
+import { createDashboardRouter } from "./modules/dashboard/router";
 
 export function createApiApp(database: PrismaClient, config: ApiConfig) {
   const app = express();
@@ -81,14 +82,16 @@ export function createApiApp(database: PrismaClient, config: ApiConfig) {
   });
   app.use("/api", generalLimiter);
 
-  app.get("/healthz", async (_request, response) => {
+  const databaseHealthCheck = async (_request: unknown, response: import("express").Response) => {
     try {
       await database.$queryRaw`SELECT 1`;
       response.json({ status: "ok" });
     } catch {
       response.status(503).json({ status: "unavailable" });
     }
-  });
+  };
+  app.get("/health", databaseHealthCheck);
+  app.get("/healthz", databaseHealthCheck);
 
   const api = express.Router();
   api.get("/openapi.json", (_request, response) => response.json(openApiDocument));
@@ -122,6 +125,7 @@ export function createApiApp(database: PrismaClient, config: ApiConfig) {
   api.use("/auth", createAuthRouter(database, config));
 
   const requireAuth = authenticate(database, config);
+  api.use("/dashboard", requireAuth, createDashboardRouter(database));
   api.use("/institutions", requireAuth, createInstitutionRouter(database));
   api.use("/users", requireAuth, createUserRouter(database));
   api.use("/students", requireAuth, createUserRouter(database, "STUDENT"));

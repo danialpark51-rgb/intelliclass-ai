@@ -8,6 +8,23 @@ type ServerEntry = {
 };
 
 let serverEntryPromise: Promise<ServerEntry> | undefined;
+const apiOrigin = process.env["API_INTERNAL_ORIGIN"] ?? "http://127.0.0.1:3001";
+
+async function forwardApiRequest(request: Request): Promise<Response> {
+  const incomingUrl = new URL(request.url);
+  const upstreamUrl = new URL(`${incomingUrl.pathname}${incomingUrl.search}`, apiOrigin);
+  const headers = new Headers(request.headers);
+  headers.delete("host");
+  headers.set("x-forwarded-host", incomingUrl.host);
+  headers.set("x-forwarded-proto", incomingUrl.protocol.slice(0, -1));
+  const forwardedFor = headers.get("x-forwarded-for") ?? headers.get("x-real-ip");
+  if (forwardedFor) headers.set("x-forwarded-for", forwardedFor);
+
+  const method = request.method.toUpperCase();
+  const init: RequestInit = { method, headers, redirect: "manual" };
+  if (method !== "GET" && method !== "HEAD") init.body = await request.arrayBuffer();
+  return fetch(upstreamUrl, init);
+}
 
 async function getServerEntry(): Promise<ServerEntry> {
   if (!serverEntryPromise) {
@@ -47,6 +64,10 @@ function isH3SwallowedErrorBody(body: string): boolean {
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const { pathname } = new URL(request.url);
+      if (pathname === "/health" || pathname === "/healthz" || pathname.startsWith("/api/")) {
+        return await forwardApiRequest(request);
+      }
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);

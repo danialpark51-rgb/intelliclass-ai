@@ -35,6 +35,23 @@ const createClassSchema = z
     }
   });
 
+const updateClassSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    code: z.string().trim().min(1).max(40).transform((code) => code.toUpperCase()).nullable().optional(),
+    teacherIds: z.array(z.string().uuid()).max(100).optional(),
+    subjectIds: z.array(z.string().uuid()).max(100).optional(),
+  })
+  .refine((input) => Object.keys(input).length > 0)
+  .superRefine((input, context) => {
+    if (input.teacherIds && new Set(input.teacherIds).size !== input.teacherIds.length) {
+      context.addIssue({ code: "custom", path: ["teacherIds"], message: "Duplicate teacher IDs" });
+    }
+    if (input.subjectIds && new Set(input.subjectIds).size !== input.subjectIds.length) {
+      context.addIssue({ code: "custom", path: ["subjectIds"], message: "Duplicate subject IDs" });
+    }
+  });
+
 const classSelect = {
   id: true,
   institutionId: true,
@@ -62,8 +79,17 @@ export function createClassRouter(database: PrismaClient) {
             institutionId: requireInstitutionId(auth),
             ...(auth.role === UserRole.TEACHER
               ? { teachers: { some: { teacherId: auth.userId } } }
-              : { enrollments: { some: { studentId: auth.userId } } }),
+              : auth.role === UserRole.STUDENT
+                ? { enrollments: { some: { studentId: auth.userId } } }
+                : {}),
           };
+    if (
+      auth.role === UserRole.INSTITUTION_ADMIN &&
+      query.institutionId &&
+      query.institutionId !== requireInstitutionId(auth)
+    ) {
+      throw new ApiError(403, "FORBIDDEN", "You cannot view classes from another institution");
+    }
 
     const [classes, total] = await Promise.all([
       database.class.findMany({
@@ -90,7 +116,9 @@ export function createClassRouter(database: PrismaClient) {
             institutionId: requireInstitutionId(auth),
             ...(auth.role === UserRole.TEACHER
               ? { teachers: { some: { teacherId: auth.userId } } }
-              : { enrollments: { some: { studentId: auth.userId } } }),
+              : auth.role === UserRole.STUDENT
+                ? { enrollments: { some: { studentId: auth.userId } } }
+                : {}),
           };
     const classRecord = await database.class.findFirst({
       where: { id, ...accessFilter },
@@ -102,7 +130,7 @@ export function createClassRouter(database: PrismaClient) {
 
   router.get(
     "/:id/enrollments",
-    requireRoles(UserRole.SUPER_ADMIN, UserRole.TEACHER),
+    requireRoles(UserRole.SUPER_ADMIN, UserRole.INSTITUTION_ADMIN, UserRole.TEACHER),
     async (request, response) => {
       const id = parseId(request.params["id"]);
       const auth = currentAuth(response);
@@ -150,7 +178,10 @@ export function createClassRouter(database: PrismaClient) {
     },
   );
 
-  router.post("/:id/enrollments", requireRoles(UserRole.SUPER_ADMIN), async (request, response) => {
+  router.post(
+    "/:id/enrollments",
+    requireRoles(UserRole.SUPER_ADMIN, UserRole.INSTITUTION_ADMIN),
+    async (request, response) => {
     const id = parseId(request.params["id"]);
     const input = z
       .object({ studentIds: z.array(z.string().uuid()).min(1).max(500) })
@@ -164,12 +195,17 @@ export function createClassRouter(database: PrismaClient) {
         }
       })
       .parse(request.body);
-    const classRecord = await database.class.findUnique({
-      where: { id },
+    const actor = currentAuth(response);
+    const classRecord = await database.class.findFirst({
+      where: {
+        id,
+        ...(actor.role === UserRole.INSTITUTION_ADMIN
+          ? { institutionId: requireInstitutionId(actor) }
+          : {}),
+      },
       select: { id: true, institutionId: true },
     });
     if (!classRecord) throw new ApiError(404, "CLASS_NOT_FOUND", "The class was not found");
-    const actor = currentAuth(response);
 
     const created = await database.$transaction(async (transaction) => {
       const students = await transaction.user.findMany({
@@ -205,14 +241,20 @@ export function createClassRouter(database: PrismaClient) {
       });
     });
     response.status(201).json({ data: created });
-  });
+    },
+  );
 
-  router.post("/", requireRoles(UserRole.SUPER_ADMIN), async (request, response) => {
+  router.post("/", requireRoles(UserRole.SUPER_ADMIN, UserRole.INSTITUTION_ADMIN), async (request, response) => {
     const input = createClassSchema.parse(request.body);
     const actor = currentAuth(response);
+    const institutionId =
+      actor.role === UserRole.SUPER_ADMIN ? input.institutionId : requireInstitutionId(actor);
+    if (input.institutionId !== institutionId) {
+      throw new ApiError(403, "FORBIDDEN", "You can only create classes in your institution");
+    }
     const classRecord = await database.$transaction(async (transaction) => {
       const institution = await transaction.institution.findUnique({
-        where: { id: input.institutionId },
+        where: { id: institutionId },
         select: { id: true },
       });
       if (!institution) {
@@ -274,6 +316,120 @@ export function createClassRouter(database: PrismaClient) {
     });
     response.status(201).json({ data: classRecord });
   });
+
+  router.patch(
+    "/:id",
+    requireRoles(UserRole.SUPER_ADMIN, UserRole.INSTITUTION_ADMIN),
+    async (request, response) => {
+      const id = parseId(request.params["id"]);
+      const input = updateClassSchema.parse(request.body);
+      const actor = currentAuth(response);
+      const scope: Prisma.ClassWhereInput = {
+        id,
+        ...(actor.role === UserRole.INSTITUTION_ADMIN
+          ? { institutionId: requireInstitutionId(actor) }
+          : {}),
+      };
+      const existing = await database.class.findFirst({
+        where: scope,
+        select: { id: true, institutionId: true },
+      });
+      if (!existing) throw new ApiError(404, "CLASS_NOT_FOUND", "The class was not found");
+
+      const updated = await database.$transaction(async (transaction) => {
+        if (input.teacherIds) {
+          const teachers = await transaction.user.findMany({
+            where: {
+              id: { in: input.teacherIds },
+              institutionId: existing.institutionId,
+              role: UserRole.TEACHER,
+              status: "ACTIVE",
+            },
+            select: { id: true },
+          });
+          if (teachers.length !== input.teacherIds.length) {
+            throw new ApiError(400, "INVALID_TEACHERS", "Every assigned teacher must belong to the institution");
+          }
+          await transaction.classTeacher.deleteMany({ where: { classId: id } });
+          if (input.teacherIds.length) {
+            await transaction.classTeacher.createMany({
+              data: input.teacherIds.map((teacherId) => ({ classId: id, teacherId })),
+            });
+          }
+        }
+        if (input.subjectIds) {
+          const subjects = await transaction.subject.findMany({
+            where: { id: { in: input.subjectIds }, institutionId: existing.institutionId },
+            select: { id: true },
+          });
+          if (subjects.length !== input.subjectIds.length) {
+            throw new ApiError(400, "INVALID_SUBJECTS", "Every assigned subject must belong to the institution");
+          }
+          await transaction.classSubject.deleteMany({ where: { classId: id } });
+          if (input.subjectIds.length) {
+            await transaction.classSubject.createMany({
+              data: input.subjectIds.map((subjectId) => ({ classId: id, subjectId })),
+            });
+          }
+        }
+        const result = await transaction.class.update({
+          where: { id },
+          data: {
+            ...(input.name !== undefined ? { name: input.name } : {}),
+            ...(input.code !== undefined ? { code: input.code } : {}),
+          },
+          select: classSelect,
+        });
+        await writeAuditLog(transaction, {
+          institutionId: existing.institutionId,
+          actorId: actor.userId,
+          action: "class.updated",
+          entityType: "Class",
+          entityId: id,
+          metadata: { changedFields: Object.keys(input) },
+        });
+        return result;
+      });
+      response.json({ data: updated });
+    },
+  );
+
+  router.delete(
+    "/:id",
+    requireRoles(UserRole.SUPER_ADMIN, UserRole.INSTITUTION_ADMIN),
+    async (request, response) => {
+      const id = parseId(request.params["id"]);
+      const actor = currentAuth(response);
+      const existing = await database.class.findFirst({
+        where: {
+          id,
+          ...(actor.role === UserRole.INSTITUTION_ADMIN
+            ? { institutionId: requireInstitutionId(actor) }
+            : {}),
+        },
+        select: { id: true, institutionId: true, _count: { select: { sessions: true } } },
+      });
+      if (!existing) throw new ApiError(404, "CLASS_NOT_FOUND", "The class was not found");
+      if (existing._count.sessions > 0) {
+        throw new ApiError(
+          409,
+          "CLASS_HAS_SESSIONS",
+          "A class with recorded sessions cannot be deleted; its history must be retained",
+        );
+      }
+      await database.$transaction(async (transaction) => {
+        await transaction.class.delete({ where: { id } });
+        await writeAuditLog(transaction, {
+          institutionId: existing.institutionId,
+          actorId: actor.userId,
+          action: "class.deleted",
+          entityType: "Class",
+          entityId: id,
+        });
+      });
+      response.status(204).end();
+    },
+  );
 
   return router;
 }

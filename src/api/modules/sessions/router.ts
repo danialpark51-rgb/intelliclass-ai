@@ -73,12 +73,14 @@ async function findAccessibleSession(
   const scope: Prisma.ClassSessionWhereInput =
     auth.role === UserRole.SUPER_ADMIN
       ? {}
-      : auth.role === UserRole.TEACHER
-        ? { institutionId: requireInstitutionId(auth), teacherId: auth.userId }
-        : {
-            institutionId: requireInstitutionId(auth),
-            class: { enrollments: { some: { studentId: auth.userId } } },
-          };
+      : auth.role === UserRole.INSTITUTION_ADMIN
+        ? { institutionId: requireInstitutionId(auth) }
+        : auth.role === UserRole.TEACHER
+          ? { institutionId: requireInstitutionId(auth), teacherId: auth.userId }
+          : {
+              institutionId: requireInstitutionId(auth),
+              class: { enrollments: { some: { studentId: auth.userId } } },
+            };
   return database.classSession.findFirst({
     where: { id, ...scope },
     select: sessionSelect,
@@ -97,12 +99,14 @@ export function createSessionRouter(database: PrismaClient) {
         ? query.institutionId
           ? { institutionId: query.institutionId }
           : {}
-        : auth.role === UserRole.TEACHER
-          ? { institutionId: requireInstitutionId(auth), teacherId: auth.userId }
-          : {
-              institutionId: requireInstitutionId(auth),
-              class: { enrollments: { some: { studentId: auth.userId } } },
-            }),
+        : auth.role === UserRole.INSTITUTION_ADMIN
+          ? { institutionId: requireInstitutionId(auth) }
+          : auth.role === UserRole.TEACHER
+            ? { institutionId: requireInstitutionId(auth), teacherId: auth.userId }
+            : {
+                institutionId: requireInstitutionId(auth),
+                class: { enrollments: { some: { studentId: auth.userId } } },
+              }),
     };
     const [sessions, total] = await Promise.all([
       database.classSession.findMany({
@@ -121,14 +125,17 @@ export function createSessionRouter(database: PrismaClient) {
 
   router.post(
     "/",
-    requireRoles(UserRole.SUPER_ADMIN, UserRole.TEACHER),
+    requireRoles(UserRole.SUPER_ADMIN, UserRole.INSTITUTION_ADMIN, UserRole.TEACHER),
     async (request, response) => {
       const input = createSessionSchema.parse(request.body);
       const auth = currentAuth(response);
       const institutionId =
-        auth.role === UserRole.SUPER_ADMIN ? input.institutionId : auth.institutionId;
+        auth.role === UserRole.SUPER_ADMIN ? input.institutionId : requireInstitutionId(auth);
       if (!institutionId) {
         throw new ApiError(400, "INSTITUTION_REQUIRED", "An institution is required");
+      }
+      if (auth.role === UserRole.INSTITUTION_ADMIN && input.institutionId && input.institutionId !== institutionId) {
+        throw new ApiError(403, "FORBIDDEN", "You can only create sessions in your institution");
       }
 
       const teacherId = auth.role === UserRole.TEACHER ? auth.userId : input.teacherId;
@@ -206,7 +213,7 @@ export function createSessionRouter(database: PrismaClient) {
 
   router.post(
     "/:id/start",
-    requireRoles(UserRole.SUPER_ADMIN, UserRole.TEACHER),
+    requireRoles(UserRole.SUPER_ADMIN, UserRole.INSTITUTION_ADMIN, UserRole.TEACHER),
     async (request, response) => {
       const id = parseId(request.params["id"]);
       const auth = currentAuth(response);
@@ -256,7 +263,7 @@ export function createSessionRouter(database: PrismaClient) {
 
   router.post(
     "/:id/end",
-    requireRoles(UserRole.SUPER_ADMIN, UserRole.TEACHER),
+    requireRoles(UserRole.SUPER_ADMIN, UserRole.INSTITUTION_ADMIN, UserRole.TEACHER),
     async (request, response) => {
       const id = parseId(request.params["id"]);
       const auth = currentAuth(response);
@@ -318,7 +325,7 @@ export function createSessionRouter(database: PrismaClient) {
 
   router.put(
     "/:id/attendance",
-    requireRoles(UserRole.SUPER_ADMIN, UserRole.TEACHER),
+    requireRoles(UserRole.SUPER_ADMIN, UserRole.INSTITUTION_ADMIN, UserRole.TEACHER),
     async (request, response) => {
       const input = attendanceSchema.parse(request.body);
       const id = parseId(request.params["id"]);

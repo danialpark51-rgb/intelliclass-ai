@@ -1,14 +1,36 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Search, Plus, Filter, ArrowRight, BookOpen, Users, GraduationCap, Library, CalendarDays, FileText, ShieldCheck, Activity, Bell, Sparkles, Play, ClipboardCheck, Clock3, Monitor, Save, Download, CircleHelp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { navigation, descriptions, type Role } from '@/lib/intelliclass';
-import { Dashboard } from './dashboard';
-import { WorkspaceShell } from './workspace-shell';
+import { ConnectedDashboard } from './connected-dashboard';
+import { AuthenticatedWorkspaceShell as WorkspaceShell } from './authenticated-workspace-shell';
 import { EmptyState, Field, Panel, DataTable, StatusBadge } from './shared';
+import { useNavigate } from '@tanstack/react-router';
+import { useAuth } from './auth-provider';
+import { ConnectedDirectory } from './connected-directory';
+import { InstitutionSetup } from './institution-setup';
+import { SessionWorkspace } from './session-workspace';
 const directories:Record<string,{name:string;plural:string;headers:string[];icon:typeof Users}>={students:{name:'student',plural:'students',headers:['Student','Student ID','Class','Status'],icon:Users},teachers:{name:'teacher',plural:'teachers',headers:['Teacher','Department','Assigned classes','Status'],icon:GraduationCap},classes:{name:'class',plural:'classes',headers:['Class','Subject','Teacher','Students','Status'],icon:BookOpen},subjects:{name:'subject',plural:'subjects',headers:['Subject','Subject code','Department','Classes'],icon:Library},'faculty-allocation':{name:'allocation',plural:'allocations',headers:['Teacher','Class','Subject','Schedule','Status'],icon:CalendarDays},'my-classes':{name:'class',plural:'classes',headers:['Class','Subject','Teacher','Schedule','Status'],icon:BookOpen}};
-export function WorkspacePage({role,page}:{role:Role;page:string}){return <WorkspaceShell role={role}>{page==='dashboard'?<Dashboard role={role}/>:<PageContent role={role} page={page}/>}</WorkspaceShell>}
+function accountRole(role: string): Role | null {
+ return role==='SUPER_ADMIN'||role==='INSTITUTION_ADMIN'?'admin':role==='TEACHER'?'teacher':role==='STUDENT'?'student':null;
+}
+export function WorkspacePage({role,page}:{role:Role;page:string}){
+ const {user,state}=useAuth(); const navigate=useNavigate();
+ useEffect(()=>{
+  if(state==='signed-out') void navigate({to:'/login',replace:true});
+  else if(state==='signed-in'&&user){
+   const actual=accountRole(user.role);
+   const destination=actual==='admin'?'/admin/dashboard':actual==='teacher'?'/teacher/dashboard':actual==='student'?'/student/dashboard':'/login';
+   if(actual!==role) void navigate({to:destination,replace:true});
+  }
+ },[navigate,role,state,user]);
+ if(state!=='signed-in'||!user||accountRole(user.role)!==role) return <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground" role="status">{state==='signed-out'?'Redirecting to sign in…':'Loading your secure workspace…'}</div>;
+ const connectedPages=['students','teachers','classes','subjects','my-classes'];
+ const sessionPages=['start-class','attendance','my-schedule','current-session'];
+ return <WorkspaceShell role={role}>{page==='dashboard'?<ConnectedDashboard role={role}/>:page==='settings'?<InstitutionSetup/>:connectedPages.includes(page)?<ConnectedDirectory page={page} role={role}/>:sessionPages.includes(page)?<SessionWorkspace page={page} role={role}/>:<PageContent role={role} page={page}/>}</WorkspaceShell>
+}
 function PageContent({role,page}:{role:Role;page:string}){
  const [query,setQuery]=useState(''); const [filter,setFilter]=useState('all'); const [dialog,setDialog]=useState(false); const [notice,setNotice]=useState(false); const [tab,setTab]=useState('All'); const [month,setMonth]=useState('October 2026');
  const title=navigation[role].find(i=>i[0]===page)?.[1]??page; const dir=directories[page];

@@ -17,6 +17,7 @@ export const openApiDocument = {
     { name: "Classes" },
     { name: "Subjects" },
     { name: "Sessions" },
+    { name: "Dashboard" },
   ],
   components: {
     securitySchemes: {
@@ -56,7 +57,7 @@ export const openApiDocument = {
       },
       UserRole: {
         type: "string",
-        enum: ["SUPER_ADMIN", "TEACHER", "STUDENT"],
+        enum: ["SUPER_ADMIN", "INSTITUTION_ADMIN", "TEACHER", "STUDENT"],
       },
     },
     responses: {
@@ -83,6 +84,17 @@ export const openApiDocument = {
         responses: {
           "200": { description: "Healthy" },
           "503": { description: "Database unavailable" },
+        },
+      },
+    },
+    "/dashboard/summary": {
+      get: {
+        tags: ["Dashboard"],
+        summary: "Read real, role-scoped institution and attendance metrics",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          "200": { description: "Database-backed dashboard summary" },
+          "403": { $ref: "#/components/responses/Forbidden" },
         },
       },
     },
@@ -182,7 +194,7 @@ export const openApiDocument = {
     "/users": {
       get: {
         tags: ["Users"],
-        summary: "List provisioned teacher and student accounts",
+        summary: "List institution-scoped accounts",
         security: [{ bearerAuth: [] }],
         responses: {
           "200": { description: "Paginated user list" },
@@ -191,9 +203,35 @@ export const openApiDocument = {
       },
       post: {
         tags: ["Users"],
-        summary: "Provision a teacher or student account",
+        summary: "Provision an institution administrator, teacher, or student account",
         security: [{ bearerAuth: [] }],
         responses: { "201": { description: "User created; password hash is never returned" } },
+      },
+    },
+    "/users/{id}": {
+      patch: {
+        tags: ["Users"],
+        summary: "Update an account's email or name",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        responses: {
+          "200": { description: "Updated account" },
+          "404": { description: "Account not found in scope" },
+        },
+      },
+      delete: {
+        tags: ["Users"],
+        summary: "Deactivate an account and revoke its sessions",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        responses: {
+          "204": { description: "Account deactivated" },
+          "404": { description: "Account not found in scope" },
+        },
       },
     },
     "/students": {
@@ -249,6 +287,30 @@ export const openApiDocument = {
         responses: {
           "200": { description: "Class details" },
           "404": { description: "Class not found in the current scope" },
+        },
+      },
+      patch: {
+        tags: ["Classes"],
+        summary: "Update a class or its institution-scoped assignments",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        responses: {
+          "200": { description: "Updated class" },
+          "404": { description: "Class not found in scope" },
+        },
+      },
+      delete: {
+        tags: ["Classes"],
+        summary: "Delete a class only when it has no recorded sessions",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        responses: {
+          "204": { description: "Class deleted" },
+          "409": { description: "Session history prevents deletion" },
         },
       },
     },
