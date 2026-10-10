@@ -11,6 +11,7 @@
 ## Backend setup
 
 - The API uses Replit's PostgreSQL `DATABASE_URL` and the existing `SESSION_SECRET`. Do not print or commit either value.
+- In development, the API allowlist includes localhost and the exact HTTPS origin derived from Replit's `REPLIT_DEV_DOMAIN`. In production, only exact origins in `FRONTEND_ORIGIN` are added; same-origin API calls forwarded by the loopback TanStack server are also checked against their forwarded host and scheme. Do not use wildcard origins.
 - Run `bun run db:generate` and `bun run db:migrate` to generate the Prisma client and apply development migrations.
 - No default account is created. Set `SUPER_ADMIN_EMAIL` and `SUPER_ADMIN_PASSWORD` in Replit Secrets, run `bun run bootstrap:admin`, then remove those bootstrap secrets.
 - Password-reset delivery is unavailable until an email provider is configured.

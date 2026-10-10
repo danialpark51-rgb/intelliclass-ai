@@ -105,11 +105,21 @@ describe("IntelliClass API", () => {
       NODE_ENV: "production",
       DATABASE_URL: "postgresql://test.invalid/test",
       SESSION_SECRET: "this-is-a-test-only-signing-secret-at-least-32",
+      REPLIT_DEV_DOMAIN: "dev.example.replit.dev",
     });
 
     expect(productionConfig.host).toBe("127.0.0.1");
     expect(productionConfig.frontendOrigins).toEqual([]);
     expect(productionConfig.cookieSecure).toBe(true);
+
+    const productionAllowlist = loadConfig({
+      NODE_ENV: "production",
+      DATABASE_URL: "postgresql://test.invalid/test",
+      SESSION_SECRET: "this-is-a-test-only-signing-secret-at-least-32",
+      FRONTEND_ORIGIN: "https://campus.example",
+      REPLIT_DEV_DOMAIN: "dev.example.replit.dev",
+    });
+    expect(productionAllowlist.frontendOrigins).toEqual(["https://campus.example"]);
   });
 
   it("allows only the trusted same-origin production proxy and rejects other origins", async () => {
@@ -137,6 +147,34 @@ describe("IntelliClass API", () => {
       .set("x-forwarded-proto", "https")
       .set("Access-Control-Request-Method", "POST")
       .set("Access-Control-Request-Headers", "content-type")
+      .expect(403);
+  });
+
+  it("allows the exact Replit development origin on login and forgot-password routes only", async () => {
+    const devDomain = "a776e25d-5b98-44b8-a2a7-04dcd45fa2fb-00-2ll9713xdwy0s.pike.replit.dev";
+    const devConfig = loadConfig({
+      NODE_ENV: "development",
+      DATABASE_URL: "postgresql://test.invalid/test",
+      SESSION_SECRET: "this-is-a-test-only-signing-secret-at-least-32",
+      REPLIT_DEV_DOMAIN: devDomain,
+    });
+    const devApp = createApiApp(database.database, devConfig);
+    const origin = `https://${devDomain}`;
+
+    for (const path of ["/api/v1/auth/login", "/api/v1/auth/forgot-password"]) {
+      const response = await supertest(devApp)
+        .options(path)
+        .set("Origin", origin)
+        .set("Access-Control-Request-Method", "POST")
+        .set("Access-Control-Request-Headers", "content-type")
+        .expect(204);
+      expect(response.headers["access-control-allow-origin"]).toBe(origin);
+    }
+
+    await supertest(devApp)
+      .options("/api/v1/auth/login")
+      .set("Origin", "https://other.pike.replit.dev")
+      .set("Access-Control-Request-Method", "POST")
       .expect(403);
   });
 
@@ -180,6 +218,58 @@ describe("IntelliClass API", () => {
     expect(database.delegates["authSession"].create).toHaveBeenCalledOnce();
   });
 
+  it("restores a login session through refresh and revokes it on logout", async () => {
+    const password = "Valid-Test-Password-2026";
+    const user = {
+      id: randomUUID(),
+      institutionId: randomUUID(),
+      email: "teacher@example.edu",
+      firstName: "Taylor",
+      lastName: "Teacher",
+      passwordHash: await bcrypt.hash(password, 4),
+      role: UserRole.TEACHER,
+      status: AccountStatus.ACTIVE,
+    };
+    const sessionId = randomUUID();
+    database.delegates["user"].findUnique.mockResolvedValue(user);
+    database.delegates["authSession"].create.mockResolvedValue({ id: sessionId });
+    database.delegates["authSession"].findFirst.mockResolvedValue({
+      id: sessionId,
+      user: {
+        id: user.id,
+        institutionId: user.institutionId,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+      },
+    });
+    database.delegates["authSession"].updateMany.mockResolvedValue({ count: 1 });
+
+    const login = await supertest(app)
+      .post("/api/v1/auth/login")
+      .send({ email: user.email, password })
+      .expect(200);
+    const initialCookie = login.headers["set-cookie"]?.[0]?.split(";")[0];
+    expect(initialCookie).toContain("ic_session=");
+
+    const refreshed = await supertest(app)
+      .post("/api/v1/auth/refresh")
+      .set("Cookie", initialCookie!)
+      .expect(200);
+    const rotatedCookie = refreshed.headers["set-cookie"]?.[0]?.split(";")[0];
+    expect(rotatedCookie).toContain("ic_session=");
+    expect(rotatedCookie).not.toBe(initialCookie);
+    expect(refreshed.body.data.user.id).toBe(user.id);
+
+    const logout = await supertest(app)
+      .post("/api/v1/auth/logout")
+      .set("Cookie", rotatedCookie!)
+      .expect(204);
+    expect(logout.headers["set-cookie"]?.[0]).toContain("Expires=Thu, 01 Jan 1970 00:00:00 GMT");
+    expect(database.delegates["authSession"].updateMany).toHaveBeenCalledTimes(2);
+  });
+
   it("rejects invalid credentials without creating a session", async () => {
     database.delegates["user"].findUnique.mockResolvedValue(null);
     await supertest(app)
@@ -202,14 +292,10 @@ describe("IntelliClass API", () => {
   it("returns institution-scoped, database-backed dashboard metrics", async () => {
     const identity = await authorize(database.delegates, UserRole.INSTITUTION_ADMIN);
     database.delegates["institution"].findUnique.mockResolvedValue({ timeZone: "Asia/Kolkata" });
-    database.delegates["user"].count
-      .mockResolvedValueOnce(12)
-      .mockResolvedValueOnce(4);
+    database.delegates["user"].count.mockResolvedValueOnce(12).mockResolvedValueOnce(4);
     database.delegates["class"].count.mockResolvedValue(5);
     database.delegates["classSession"].count.mockResolvedValue(3);
-    database.delegates["attendanceRecord"].count
-      .mockResolvedValueOnce(5)
-      .mockResolvedValueOnce(3);
+    database.delegates["attendanceRecord"].count.mockResolvedValueOnce(5).mockResolvedValueOnce(3);
 
     const response = await supertest(app)
       .get("/api/v1/dashboard/summary")
@@ -325,7 +411,10 @@ describe("IntelliClass API", () => {
     expect(JSON.stringify(response.body)).not.toContain("passwordHash");
     expect(database.delegates["user"].create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.not.objectContaining({ teacherProfile: expect.anything(), studentProfile: expect.anything() }),
+        data: expect.not.objectContaining({
+          teacherProfile: expect.anything(),
+          studentProfile: expect.anything(),
+        }),
       }),
     );
   });
@@ -430,10 +519,16 @@ describe("IntelliClass API", () => {
   });
 
   it("does not claim password reset works without an email provider", async () => {
-    const response = await supertest(app)
+    const resetApp = createApiApp(database.database, {
+      ...config,
+      frontendOrigins: ["https://campus.example"],
+    });
+    const response = await supertest(resetApp)
       .post("/api/v1/auth/forgot-password")
+      .set("Origin", "https://campus.example")
       .send({ email: "person@example.edu" })
       .expect(503);
+    expect(response.headers["access-control-allow-origin"]).toBe("https://campus.example");
     expect(response.body.error.code).toBe("EMAIL_DELIVERY_NOT_CONFIGURED");
     expect(database.delegates["passwordResetToken"].create).not.toHaveBeenCalled();
   });

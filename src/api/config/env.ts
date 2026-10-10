@@ -7,6 +7,7 @@ const envSchema = z.object({
   API_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   API_HOST: z.string().trim().min(1).optional(),
   FRONTEND_ORIGIN: z.string().optional(),
+  REPLIT_DEV_DOMAIN: z.string().trim().min(1).optional(),
   COOKIE_SECURE: z.enum(["true", "false"]).optional(),
   COOKIE_SAME_SITE: z.enum(["strict", "lax", "none"]).default("lax"),
 });
@@ -44,6 +45,25 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): ApiConfig {
     }
   }
 
+  const developmentOrigins = new Set(["http://localhost:5000", "http://127.0.0.1:5000"]);
+  if (values.NODE_ENV === "development" && values.REPLIT_DEV_DOMAIN) {
+    try {
+      const origin = `https://${values.REPLIT_DEV_DOMAIN}`;
+      const parsedOrigin = new URL(origin);
+      if (
+        parsedOrigin.origin !== origin ||
+        parsedOrigin.hostname !== values.REPLIT_DEV_DOMAIN ||
+        parsedOrigin.username ||
+        parsedOrigin.password
+      ) {
+        throw new Error();
+      }
+      developmentOrigins.add(origin);
+    } catch {
+      throw new Error("REPLIT_DEV_DOMAIN must contain a hostname without a scheme or path");
+    }
+  }
+
   const cookieSecure =
     values.COOKIE_SECURE === undefined
       ? values.NODE_ENV === "production"
@@ -58,9 +78,10 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): ApiConfig {
     sessionSecret: values.SESSION_SECRET,
     port: values.API_PORT,
     host: values.API_HOST ?? (values.NODE_ENV === "production" ? "127.0.0.1" : "0.0.0.0"),
-    frontendOrigins:
-      frontendOrigins ??
-      (values.NODE_ENV === "development" ? ["http://localhost:5000", "http://127.0.0.1:5000"] : []),
+    frontendOrigins: [
+      ...(values.NODE_ENV === "development" ? developmentOrigins : []),
+      ...(frontendOrigins ?? []),
+    ],
     cookieSecure,
     cookieSameSite: values.COOKIE_SAME_SITE,
   };
