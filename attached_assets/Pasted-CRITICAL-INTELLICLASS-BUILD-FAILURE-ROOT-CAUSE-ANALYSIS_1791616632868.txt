@@ -1,0 +1,194 @@
+CRITICAL: INTELLICLASS BUILD FAILURE — ROOT-CAUSE ANALYSIS, COMPLETE REPAIR, AND PRE-PUBLISH VERIFICATION
+
+Act as a senior DevOps engineer, full-stack engineer, build-system specialist, and production QA engineer.
+
+My existing IntelliClass application failed during Replit publishing.
+
+The publishing screen reports:
+
+"Build command failed. Check the Logs tab for more details."
+
+The build stage failed before publishing could complete. Your task is to identify the actual root cause, repair it, verify the entire application, and prepare a successful production deployment.
+
+LIVE APPLICATION:
+https://intelliclass-ai--amitnagareddi97.replit.app/
+
+ABSOLUTE REQUIREMENTS
+
+1. Work on the existing IntelliClass project.
+2. Preserve all existing features, pages, UI design, routes, branding, and working functionality.
+3. Do not rebuild the application from scratch.
+4. Do not delete working code, database data, migrations, or configuration unnecessarily.
+5. Do not guess at the cause of the failure. Inspect the actual logs and reproduce the failure first.
+6. Fix root causes rather than hiding errors or bypassing failed build steps.
+7. Recheck the complete build and all critical application workflows after fixing the issue.
+8. Do not claim success unless the relevant commands and tests actually pass.
+9. Never expose secrets, API keys, passwords, or database credentials in logs or reports.
+10. Do not promise that future issues are impossible. Instead, implement checks that catch preventable failures before deployment.
+
+PHASE 1 — INSPECT THE FAILURE
+
+Before changing any files:
+
+- Inspect the Replit publishing/build logs.
+- Identify the exact failed command and complete relevant error output.
+- Inspect package.json and the package manager's lockfile.
+- Inspect the framework, runtime version, TypeScript configuration, build configuration, and start command.
+- Inspect the existing application entry points and deployment configuration.
+- Check dependency versions, missing modules, incorrect imports, invalid scripts, type errors, syntax errors, and missing build-time environment variables.
+- Check whether the application uses a frontend, backend, or both.
+- Determine whether the publishing configuration matches the actual application architecture.
+- Reproduce the failed build locally in the Replit development environment where possible.
+
+Create a short root-cause report identifying:
+
+1. The exact error.
+2. The file or configuration responsible.
+3. Why the error occurred.
+4. The safest correction.
+
+If logs are inaccessible, explicitly state that limitation and run appropriate diagnostic commands. Do not invent log output.
+
+PHASE 2 — REPAIR THE ROOT CAUSE
+
+Implement the necessary fixes based on the verified error.
+
+Check and repair where applicable:
+
+- Incorrect or missing build scripts.
+- Broken package.json configuration.
+- Dependency and lockfile inconsistencies.
+- Missing dependencies or invalid package versions.
+- TypeScript compilation failures.
+- Invalid import paths and filename casing.
+- Frontend bundler errors.
+- Backend compilation errors.
+- Incorrect environment-variable handling.
+- Incorrect production start commands.
+- Incorrect application entry points.
+- Invalid route imports.
+- Build-time references to unavailable secrets.
+- Incorrect static asset paths.
+- Port and host binding configuration.
+- Database initialization or migration issues that prevent startup.
+
+Do not apply unrelated changes just because they are possible improvements.
+
+Preserve the existing package manager and project structure unless the verified root cause requires a change.
+
+Do not remove TypeScript checks, tests, or lint rules merely to make the build pass.
+
+PHASE 3 — VERIFY THE ENTIRE APPLICATION
+
+After fixing the root cause, run every relevant available check:
+
+1. Install or verify dependencies using the correct lockfile.
+2. Run the production build.
+3. Run TypeScript type checking if applicable.
+4. Run linting if configured.
+5. Run unit tests.
+6. Run integration tests if available.
+7. Verify frontend and backend compilation.
+8. Check API routes and imports.
+9. Check authentication and authorization flows.
+10. Check database connectivity and migrations safely.
+11. Check that existing pages and routes still work.
+12. Check that missing environment variables produce clear, actionable errors.
+13. Check that no secrets are embedded in frontend bundles.
+14. Check for regressions introduced by the repair.
+
+Do not report tests as passing if they were not run. Identify any checks that remain blocked or unavailable.
+
+PHASE 4 — INTELLICLASS FUNCTIONAL REGRESSION CHECK
+
+Preserve the existing application and verify these areas where implemented:
+
+- Public landing page.
+- Login and password-reset pages.
+- Admin Dashboard.
+- Teacher Dashboard.
+- Student Dashboard.
+- Students, Teachers, Classes, and Subjects.
+- Faculty Allocation.
+- Analytics and Reports.
+- Classroom sessions and attendance.
+- Classroom Control and permissions.
+- Timers and session expiry.
+- Activity logs and alerts.
+- AI reports.
+- Settings and profile pages.
+- Navigation and responsive layouts.
+- API error handling and loading states.
+
+Test each existing feature against its actual implementation. Do not mark a feature as working merely because its page renders.
+
+Where a feature is not implemented or requires external configuration, document that clearly instead of fabricating functionality.
+
+PHASE 5 — SECURITY AND DATA SAFETY
+
+- Preserve existing user data and database records.
+- Do not reset the database or delete migrations.
+- Do not print secrets into logs.
+- Verify authentication and role-based access controls where implemented.
+- Verify that unauthorized users cannot access protected administrative functions.
+- Check production CORS and environment-variable configuration.
+- Do not disable security checks to obtain a successful build.
+- Do not migrate or modify production data destructively.
+
+If a database migration is necessary, explain its impact and use a safe migration process.
+
+PHASE 6 — PREVENTION AND BUILD RELIABILITY
+
+After the immediate fix, improve deployment reliability without unnecessarily complicating the project.
+
+Where appropriate:
+
+- Ensure the build command is deterministic and documented.
+- Ensure dependency installation is reproducible.
+- Add or repair a pre-deployment validation script.
+- Add automated tests for the failure that occurred.
+- Add a lightweight application health-check endpoint if the architecture supports it.
+- Ensure startup failures produce useful diagnostic messages.
+- Document required environment variables.
+- Add a pre-publish checklist.
+- Ensure failed tests or compilation errors are not silently ignored.
+
+Do not add unnecessary dependencies or paid services.
+
+PHASE 7 — FINAL PUBLISHING VERIFICATION
+
+Before declaring the task complete:
+
+1. Run the exact configured production build command again from a clean or appropriately cleaned build state.
+2. Confirm the command exits successfully.
+3. Confirm the production start command is valid.
+4. Confirm the application starts successfully in the supported environment.
+5. Run the available automated tests again.
+6. Verify critical routes and health checks.
+7. Review the final logs for errors.
+8. Verify the Replit publishing configuration.
+9. Publish or republish only if the environment permits it and all required checks pass.
+10. Verify the deployed application after publishing.
+
+Do not claim that publishing succeeded unless the deployment reports success and the deployed application has been checked.
+
+If publishing requires a manual action or a plan upgrade, tell me exactly what I must do. Do not claim to have completed an action you could not perform.
+
+FINAL REPORT REQUIRED
+
+When finished, provide a concise engineering report containing:
+
+A. Original root cause.
+B. Files changed and why.
+C. Fixes implemented.
+D. Exact build command executed and its result.
+E. Type-check, lint, and test results.
+F. Database and security checks completed.
+G. Existing functionality verified.
+H. Any remaining issues or blocked checks.
+I. Publishing status.
+J. Recommended next step.
+
+Start with Phase 1. Diagnose the actual error before modifying the application, then continue through the phases systematically.
+
+The goal is a verified, reproducible successful build and a stable deployment—not merely making the error message disappear.
