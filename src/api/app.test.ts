@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApiApp } from "./app";
 import { loadConfig, type ApiConfig } from "./config/env";
-import { createAccessToken } from "./middleware/authenticate";
+import { createAccessToken, hashToken } from "./middleware/authenticate";
 
 const config: ApiConfig = {
   nodeEnv: "test",
@@ -15,7 +15,9 @@ const config: ApiConfig = {
   sessionSecret: "this-is-a-test-only-signing-secret-at-least-32",
   port: 3001,
   host: "127.0.0.1",
+  appUrl: "http://localhost:5000",
   frontendOrigins: [],
+  smtp: null,
   cookieSecure: false,
   cookieSameSite: "lax",
 };
@@ -112,6 +114,7 @@ describe("IntelliClass API", () => {
     expect(productionConfig.frontendOrigins).toEqual([
       "https://intelliclass-ai--luffymonkeyd338.replit.app",
     ]);
+    expect(productionConfig.appUrl).toBe("https://intelliclass-ai--luffymonkeyd338.replit.app");
     expect(productionConfig.cookieSecure).toBe(true);
 
     const productionAllowlist = loadConfig({
@@ -125,6 +128,32 @@ describe("IntelliClass API", () => {
       "https://intelliclass-ai--luffymonkeyd338.replit.app",
       "https://campus.example",
     ]);
+
+    const developmentConfig = loadConfig({
+      NODE_ENV: "development",
+      DATABASE_URL: "postgresql://test.invalid/test",
+      SESSION_SECRET: "this-is-a-test-only-signing-secret-at-least-32",
+      REPLIT_DEV_DOMAIN: "intelliclass-dev.example.replit.dev",
+      SMTP_HOST: "smtp.example",
+      SMTP_PORT: "587",
+      EMAIL_USER: "mailer@example.com",
+      EMAIL_PASS: "test-only-password",
+    });
+    expect(developmentConfig.appUrl).toBe("https://intelliclass-dev.example.replit.dev");
+    expect(developmentConfig.frontendOrigins).toContain(developmentConfig.appUrl);
+    expect(developmentConfig.smtp).toMatchObject({
+      host: "smtp.example",
+      port: 587,
+      user: "mailer@example.com",
+    });
+    expect(() =>
+      loadConfig({
+        NODE_ENV: "development",
+        DATABASE_URL: "postgresql://test.invalid/test",
+        SESSION_SECRET: "this-is-a-test-only-signing-secret-at-least-32",
+        SMTP_HOST: "smtp.example",
+      }),
+    ).toThrow("SMTP_HOST, SMTP_PORT, EMAIL_USER, and EMAIL_PASS must be configured together");
   });
 
   it("allows the exact production Replit app origin and rejects sibling deployments", async () => {
@@ -566,5 +595,178 @@ describe("IntelliClass API", () => {
     expect(response.headers["access-control-allow-origin"]).toBe("https://campus.example");
     expect(response.body.error.code).toBe("EMAIL_DELIVERY_NOT_CONFIGURED");
     expect(database.delegates["passwordResetToken"].create).not.toHaveBeenCalled();
+  });
+
+  it("sends a generic reset response and persists only a hashed, expiring token", async () => {
+    const userId = randomUUID();
+    const resetTokenId = randomUUID();
+    const sender = vi.fn(async (_recipient: string, _resetUrl: string) => undefined);
+    const resetApp = createApiApp(
+      database.database,
+      {
+        ...config,
+        appUrl: "https://intelliclass-ai--luffymonkeyd338.replit.app",
+        frontendOrigins: ["https://campus.example"],
+        smtp: {
+          host: "smtp.example",
+          port: 587,
+          user: "mailer@example.com",
+          password: "test-only-password",
+          from: "mailer@example.com",
+        },
+      },
+      { sendPasswordResetEmail: sender },
+    );
+    database.delegates["user"].findUnique.mockResolvedValue({
+      id: userId,
+      status: AccountStatus.ACTIVE,
+    });
+    database.delegates["passwordResetToken"].updateMany.mockResolvedValue({ count: 1 });
+    database.delegates["passwordResetToken"].create.mockResolvedValue({ id: resetTokenId });
+
+    const response = await supertest(resetApp)
+      .post("/api/v1/auth/forgot-password")
+      .set("Origin", "https://campus.example")
+      .send({ email: "person@example.edu" })
+      .expect(202);
+
+    expect(response.body.data.message).toMatch(/If an account with that email exists/);
+    expect(sender).toHaveBeenCalledOnce();
+    const resetUrl = new URL(sender.mock.calls[0]![1]);
+    expect(resetUrl.origin).toBe("https://intelliclass-ai--luffymonkeyd338.replit.app");
+    expect(resetUrl.pathname).toBe("/reset-password");
+    const rawToken = resetUrl.searchParams.get("token");
+    expect(rawToken).toBeTruthy();
+    const tokenCreateCall =
+      database.delegates["passwordResetToken"].create.mock.calls[0]![0];
+    expect(tokenCreateCall.data.userId).toBe(userId);
+    expect(tokenCreateCall.data.tokenHash).toBe(hashToken(rawToken!));
+    expect(tokenCreateCall.data.tokenHash).not.toBe(rawToken);
+    expect(tokenCreateCall.data.expiresAt.getTime()).toBeGreaterThan(Date.now());
+    expect(tokenCreateCall.data.expiresAt.getTime()).toBeLessThanOrEqual(Date.now() + 30 * 60_000);
+
+    database.delegates["passwordResetToken"].findFirst.mockResolvedValue({
+      id: resetTokenId,
+      userId,
+      user: { institutionId: randomUUID() },
+    });
+    database.delegates["passwordResetToken"].update.mockResolvedValue({});
+    database.delegates["user"].update.mockResolvedValue({});
+    database.delegates["authSession"].updateMany.mockResolvedValue({ count: 1 });
+    database.delegates["auditLog"].create.mockResolvedValue({ id: randomUUID() });
+    await supertest(resetApp)
+      .post("/api/v1/auth/reset-password")
+      .send({ token: rawToken, password: "a-different-secure-password" })
+      .expect(204);
+    const passwordUpdate = database.delegates["user"].update.mock.calls[0]![0];
+    expect(
+      await bcrypt.compare("a-different-secure-password", passwordUpdate.data.passwordHash),
+    ).toBe(true);
+    expect(database.delegates["passwordResetToken"].update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: resetTokenId }, data: { usedAt: expect.any(Date) } }),
+    );
+    expect(database.delegates["authSession"].updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId, revokedAt: null } }),
+    );
+  });
+
+  it("does not disclose whether a reset email belongs to an account", async () => {
+    const sender = vi.fn(async (_recipient: string, _resetUrl: string) => undefined);
+    const resetApp = createApiApp(
+      database.database,
+      {
+        ...config,
+        smtp: {
+          host: "smtp.example",
+          port: 587,
+          user: "mailer",
+          password: "test-only-password",
+          from: "mailer",
+        },
+      },
+      { sendPasswordResetEmail: sender },
+    );
+    database.delegates["user"].findUnique.mockResolvedValue(null);
+
+    const response = await supertest(resetApp)
+      .post("/api/v1/auth/forgot-password")
+      .send({ email: "missing@example.edu" })
+      .expect(202);
+
+    expect(response.body.data.message).toMatch(/If an account with that email exists/);
+    expect(sender).not.toHaveBeenCalled();
+    expect(database.delegates["passwordResetToken"].create).not.toHaveBeenCalled();
+  });
+
+  it("invalidates a reset token when SMTP delivery fails without exposing the transport error", async () => {
+    const userId = randomUUID();
+    const resetTokenId = randomUUID();
+    const sender = vi.fn(async (_recipient: string, _resetUrl: string) => {
+      throw new Error("SMTP credentials and recipient must not reach the client");
+    });
+    const resetApp = createApiApp(
+      database.database,
+      {
+        ...config,
+        smtp: {
+          host: "smtp.example",
+          port: 587,
+          user: "mailer",
+          password: "test-only-password",
+          from: "mailer",
+        },
+      },
+      { sendPasswordResetEmail: sender },
+    );
+    database.delegates["user"].findUnique.mockResolvedValue({
+      id: userId,
+      status: AccountStatus.ACTIVE,
+    });
+    database.delegates["passwordResetToken"].create.mockResolvedValue({ id: resetTokenId });
+    database.delegates["passwordResetToken"].updateMany.mockResolvedValue({ count: 1 });
+
+    const response = await supertest(resetApp)
+      .post("/api/v1/auth/forgot-password")
+      .send({ email: "person@example.edu" })
+      .expect(202);
+
+    expect(response.body.error).toBeUndefined();
+    expect(JSON.stringify(response.body)).not.toContain("SMTP credentials");
+    expect(database.delegates["passwordResetToken"].updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: resetTokenId, usedAt: null },
+        data: { usedAt: expect.any(Date) },
+      }),
+    );
+  });
+
+  it("invalidates active sessions and reset links when an institution admin resets a scoped account", async () => {
+    const identity = await authorize(database.delegates, UserRole.INSTITUTION_ADMIN);
+    const targetId = randomUUID();
+    database.delegates["user"].findFirst.mockResolvedValue({
+      id: targetId,
+      institutionId: identity.institutionId,
+      role: UserRole.STUDENT,
+    });
+    database.delegates["authSession"].updateMany.mockResolvedValue({ count: 1 });
+    database.delegates["passwordResetToken"].updateMany.mockResolvedValue({ count: 1 });
+    database.delegates["auditLog"].create.mockResolvedValue({ id: randomUUID() });
+
+    await supertest(app)
+      .post(`/api/v1/users/${targetId}/reset-password`)
+      .set("Authorization", `Bearer ${identity.token}`)
+      .send({ password: "a-new-secure-password" })
+      .expect(204);
+
+    const updateCall = database.delegates["user"].update.mock.calls[0]![0];
+    expect(updateCall.where).toEqual({ id: targetId });
+    expect(await bcrypt.compare("a-new-secure-password", updateCall.data.passwordHash)).toBe(true);
+    expect(database.delegates["authSession"].updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: targetId, revokedAt: null } }),
+    );
+    expect(database.delegates["passwordResetToken"].updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: targetId, usedAt: null } }),
+    );
+    expect(database.delegates["auditLog"].create).toHaveBeenCalledOnce();
   });
 });

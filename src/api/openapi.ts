@@ -262,6 +262,40 @@ export const openApiDocument = {
         responses: { "201": { description: "Teacher created" } },
       },
     },
+    "/users/{id}/reset-password": {
+      post: {
+        tags: ["Users"],
+        summary: "Set a new password for an account in the administrator's permitted scope",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["password"],
+                properties: {
+                  password: {
+                    type: "string",
+                    format: "password",
+                    minLength: 12,
+                    maxLength: 128,
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "204": { description: "Password updated; existing sessions and reset links revoked" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "404": { description: "Account not found in scope" },
+        },
+      },
+    },
     "/classes": {
       get: {
         tags: ["Classes"],

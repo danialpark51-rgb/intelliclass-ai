@@ -6,6 +6,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { ApiConfig } from "../../config/env";
 import { ApiError } from "../../lib/errors";
 import { writeAuditLog } from "../../lib/audit";
+import { createPasswordResetEmailSender, type PasswordResetEmailSender } from "./email";
 import {
   authenticate,
   clearRefreshCookie,
@@ -69,7 +70,13 @@ function publicUser(user: {
   };
 }
 
-export function createAuthRouter(database: PrismaClient, config: ApiConfig) {
+export function createAuthRouter(
+  database: PrismaClient,
+  config: ApiConfig,
+  sendPasswordResetEmail: PasswordResetEmailSender | null = config.smtp
+    ? createPasswordResetEmailSender(config.smtp)
+    : null,
+) {
   const router = Router();
   const requireAuth = authenticate(database, config);
 
@@ -199,14 +206,57 @@ export function createAuthRouter(database: PrismaClient, config: ApiConfig) {
   });
 
   router.post("/forgot-password", async (request, response) => {
-    forgotPasswordSchema.parse(request.body);
-    // A reset request must not be reported as successful until a real delivery
-    // provider exists; no reset token is created or logged in this state.
-    response.status(503).json({
-      error: {
-        code: "EMAIL_DELIVERY_NOT_CONFIGURED",
-        message: "Password reset is unavailable until an email provider is configured",
-        requestId: request.id,
+    const input = forgotPasswordSchema.parse(request.body);
+    if (!sendPasswordResetEmail) {
+      throw new ApiError(
+        503,
+        "EMAIL_DELIVERY_NOT_CONFIGURED",
+        "Password reset is not configured yet. Contact your institution administrator.",
+      );
+    }
+
+    const user = await database.user.findUnique({
+      where: { email: input.email },
+      select: { id: true, status: true },
+    });
+    if (user?.status === AccountStatus.ACTIVE) {
+      const token = randomBytes(32).toString("base64url");
+      const tokenHash = hashToken(token);
+      const now = new Date();
+
+      await database.passwordResetToken.updateMany({
+        where: { userId: user.id, usedAt: null },
+        data: { usedAt: now },
+      });
+      const resetToken = await database.passwordResetToken.create({
+        data: {
+          userId: user.id,
+          tokenHash,
+          expiresAt: new Date(now.getTime() + 30 * 60_000),
+        },
+        select: { id: true },
+      });
+      const resetUrl = new URL("/reset-password", config.appUrl);
+      resetUrl.searchParams.set("token", token);
+
+      try {
+        await sendPasswordResetEmail(input.email, resetUrl.toString());
+      } catch (error) {
+        await database.passwordResetToken.updateMany({
+          where: { id: resetToken.id, usedAt: null },
+          data: { usedAt: new Date() },
+        });
+        request.log.warn(
+          { errorName: error instanceof Error ? error.name : "UnknownError" },
+          "Password reset email delivery failed",
+        );
+      }
+    }
+
+    // Keep both the response and status the same for known and unknown accounts.
+    response.status(202).json({
+      data: {
+        message: "If an account with that email exists, password-reset instructions will be sent.",
       },
     });
   });
@@ -222,7 +272,11 @@ export function createAuthRouter(database: PrismaClient, config: ApiConfig) {
         include: { user: { select: { institutionId: true } } },
       });
       if (!resetToken) {
-        throw new ApiError(400, "INVALID_RESET_TOKEN", "The reset token is invalid or expired");
+        throw new ApiError(
+          400,
+          "INVALID_RESET_TOKEN",
+          "This password reset link is invalid or expired. Request a new link.",
+        );
       }
       await transaction.passwordResetToken.update({
         where: { id: resetToken.id },

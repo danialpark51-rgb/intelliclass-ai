@@ -59,6 +59,15 @@ const updateUserSchema = z
     lastName: z.string().trim().min(1).max(100).optional(),
   })
   .refine((input) => Object.keys(input).length > 0);
+const resetUserPasswordSchema = z.object({
+  password: z
+    .string()
+    .min(12)
+    .max(128)
+    .refine((password) => Buffer.byteLength(password, "utf8") <= 72, {
+      message: "Password must be at most 72 bytes",
+    }),
+});
 
 export function createUserRouter(database: PrismaClient, forcedRole?: "STUDENT" | "TEACHER") {
   const router = Router();
@@ -177,6 +186,64 @@ export function createUserRouter(database: PrismaClient, forcedRole?: "STUDENT" 
       return created;
     });
     response.status(201).json({ data: user });
+  });
+
+  router.post("/:id/reset-password", async (request, response) => {
+    const actor = currentAuth(response);
+    const id = parseId(request.params["id"]);
+    if (id === actor.userId) {
+      throw new ApiError(
+        400,
+        "CANNOT_RESET_OWN_PASSWORD",
+        "Use Forgot Password to reset your own password",
+      );
+    }
+
+    const where: Prisma.UserWhereInput = {
+      id,
+      ...(actor.role === UserRole.INSTITUTION_ADMIN
+        ? { institutionId: requireInstitutionId(actor) }
+        : {}),
+      ...(forcedRole ? { role: forcedRole } : {}),
+    };
+    const existing = await database.user.findFirst({
+      where,
+      select: { id: true, institutionId: true, role: true },
+    });
+    if (!existing) throw new ApiError(404, "USER_NOT_FOUND", "The account was not found");
+    if (actor.role === UserRole.INSTITUTION_ADMIN && existing.role === UserRole.INSTITUTION_ADMIN) {
+      throw new ApiError(
+        403,
+        "FORBIDDEN",
+        "Only a Super Admin can reset an institution administrator password",
+      );
+    }
+
+    const input = resetUserPasswordSchema.parse(request.body);
+    const passwordHash = await bcrypt.hash(input.password, 12);
+    const now = new Date();
+    await database.$transaction(async (transaction) => {
+      await transaction.user.update({
+        where: { id },
+        data: { passwordHash },
+      });
+      await transaction.authSession.updateMany({
+        where: { userId: id, revokedAt: null },
+        data: { revokedAt: now },
+      });
+      await transaction.passwordResetToken.updateMany({
+        where: { userId: id, usedAt: null },
+        data: { usedAt: now },
+      });
+      await writeAuditLog(transaction, {
+        institutionId: existing.institutionId,
+        actorId: actor.userId,
+        action: "auth.password_admin_reset",
+        entityType: "User",
+        entityId: id,
+      });
+    });
+    response.status(204).end();
   });
 
   router.patch("/:id", async (request, response) => {

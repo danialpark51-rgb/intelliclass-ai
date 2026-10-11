@@ -11,6 +11,7 @@ import { errorHandler, ApiError } from "./lib/errors";
 import { authenticate } from "./middleware/authenticate";
 import { openApiDocument } from "./openapi";
 import { createAuthRouter } from "./modules/auth/router";
+import type { PasswordResetEmailSender } from "./modules/auth/email";
 import { createInstitutionRouter } from "./modules/institutions/router";
 import { createUserRouter } from "./modules/users/router";
 import { createClassRouter } from "./modules/classes/router";
@@ -51,7 +52,15 @@ function isTrustedSameOriginProxyRequest(request: import("express").Request, ori
   }
 }
 
-export function createApiApp(database: PrismaClient, config: ApiConfig) {
+type ApiAppDependencies = {
+  sendPasswordResetEmail?: PasswordResetEmailSender;
+};
+
+export function createApiApp(
+  database: PrismaClient,
+  config: ApiConfig,
+  dependencies: ApiAppDependencies = {},
+) {
   const app = express();
   const logger = pino({
     level: config.nodeEnv === "test" ? "silent" : "info",
@@ -157,8 +166,34 @@ export function createApiApp(database: PrismaClient, config: ApiConfig) {
       error: { code: "RATE_LIMITED", message: "Too many login attempts. Try again later." },
     },
   });
+  const passwordResetLimiter = rateLimit({
+    windowMs: 15 * 60_000,
+    limit: 5,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    message: {
+      error: {
+        code: "RATE_LIMITED",
+        message: "Too many password reset requests. Try again later.",
+      },
+    },
+  });
+  const resetTokenLimiter = rateLimit({
+    windowMs: 15 * 60_000,
+    limit: 10,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    message: {
+      error: {
+        code: "RATE_LIMITED",
+        message: "Too many password reset attempts. Request a new link later.",
+      },
+    },
+  });
   api.use("/auth/login", loginLimiter);
-  api.use("/auth", createAuthRouter(database, config));
+  api.use("/auth/forgot-password", passwordResetLimiter);
+  api.use("/auth/reset-password", resetTokenLimiter);
+  api.use("/auth", createAuthRouter(database, config, dependencies.sendPasswordResetEmail));
 
   const requireAuth = authenticate(database, config);
   api.use("/dashboard", requireAuth, createDashboardRouter(database));
