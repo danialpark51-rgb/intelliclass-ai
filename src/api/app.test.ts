@@ -162,21 +162,22 @@ describe("IntelliClass API", () => {
       frontendOrigins: [],
       cookieSecure: true,
     });
+    const replitOrigin = "https://intelliclass-preview--another-user.replit.app";
 
     const allowed = await supertest(productionApp)
       .options("/api/v1/auth/login")
-      .set("Origin", "https://campus.example")
-      .set("x-forwarded-host", "campus.example")
+      .set("Origin", replitOrigin)
+      .set("x-forwarded-host", "intelliclass-preview--another-user.replit.app")
       .set("x-forwarded-proto", "https")
       .set("Access-Control-Request-Method", "POST")
       .set("Access-Control-Request-Headers", "content-type")
       .expect(204);
-    expect(allowed.headers["access-control-allow-origin"]).toBe("https://campus.example");
+    expect(allowed.headers["access-control-allow-origin"]).toBe(replitOrigin);
 
     await supertest(productionApp)
       .options("/api/v1/auth/login")
       .set("Origin", "https://attacker.example")
-      .set("x-forwarded-host", "campus.example")
+      .set("x-forwarded-host", "intelliclass-preview--another-user.replit.app")
       .set("x-forwarded-proto", "https")
       .set("Access-Control-Request-Method", "POST")
       .set("Access-Control-Request-Headers", "content-type")
