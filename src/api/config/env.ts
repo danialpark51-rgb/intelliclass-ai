@@ -45,7 +45,11 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): ApiConfig {
     }
   }
 
-  const developmentOrigins = new Set(["http://localhost:5000", "http://127.0.0.1:5000"]);
+  const developmentOrigins = new Set([
+    "http://localhost",
+    "http://localhost:5000",
+    "http://127.0.0.1:5000",
+  ]);
   if (values.NODE_ENV === "development" && values.REPLIT_DEV_DOMAIN) {
     try {
       const origin = `https://${values.REPLIT_DEV_DOMAIN}`;
@@ -80,6 +84,9 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): ApiConfig {
     host: values.API_HOST ?? (values.NODE_ENV === "production" ? "127.0.0.1" : "0.0.0.0"),
     frontendOrigins: [
       ...(values.NODE_ENV === "development" ? developmentOrigins : []),
+      ...(values.NODE_ENV === "production"
+        ? ["https://intelliclass-ai--luffymonkeyd338.replit.app"]
+        : []),
       ...(frontendOrigins ?? []),
     ],
     cookieSecure,

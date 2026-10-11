@@ -100,7 +100,7 @@ describe("IntelliClass API", () => {
     app = createApiApp(database.database, config);
   });
 
-  it("uses a loopback API host and secure cookies for production without a guessed frontend origin", () => {
+  it("uses the exact production app origin without allowing the Replit dev domain", () => {
     const productionConfig = loadConfig({
       NODE_ENV: "production",
       DATABASE_URL: "postgresql://test.invalid/test",
@@ -109,7 +109,9 @@ describe("IntelliClass API", () => {
     });
 
     expect(productionConfig.host).toBe("127.0.0.1");
-    expect(productionConfig.frontendOrigins).toEqual([]);
+    expect(productionConfig.frontendOrigins).toEqual([
+      "https://intelliclass-ai--luffymonkeyd338.replit.app",
+    ]);
     expect(productionConfig.cookieSecure).toBe(true);
 
     const productionAllowlist = loadConfig({
@@ -119,7 +121,38 @@ describe("IntelliClass API", () => {
       FRONTEND_ORIGIN: "https://campus.example",
       REPLIT_DEV_DOMAIN: "dev.example.replit.dev",
     });
-    expect(productionAllowlist.frontendOrigins).toEqual(["https://campus.example"]);
+    expect(productionAllowlist.frontendOrigins).toEqual([
+      "https://intelliclass-ai--luffymonkeyd338.replit.app",
+      "https://campus.example",
+    ]);
+  });
+
+  it("allows the exact production Replit app origin and rejects sibling deployments", async () => {
+    const productionConfig = loadConfig({
+      NODE_ENV: "production",
+      DATABASE_URL: "postgresql://test.invalid/test",
+      SESSION_SECRET: "this-is-a-test-only-signing-secret-at-least-32",
+    });
+    const productionApp = createApiApp(database.database, productionConfig);
+
+    const allowed = await supertest(productionApp)
+      .options("/api/v1/auth/login")
+      .set("Origin", "https://intelliclass-ai--luffymonkeyd338.replit.app")
+      .set("Access-Control-Request-Method", "POST")
+      .set("Access-Control-Request-Headers", "content-type")
+      .expect(204);
+    expect(allowed.headers["access-control-allow-origin"]).toBe(
+      "https://intelliclass-ai--luffymonkeyd338.replit.app",
+    );
+
+    const denied = await supertest(productionApp)
+      .options("/api/v1/auth/login")
+      .set("Origin", "https://another-project.replit.app")
+      .set("Access-Control-Request-Method", "POST")
+      .expect(403);
+    expect(denied.body.error.message).toBe(
+      "Please open IntelliClass using an approved app address.",
+    );
   });
 
   it("allows only the trusted same-origin production proxy and rejects other origins", async () => {
@@ -160,6 +193,7 @@ describe("IntelliClass API", () => {
     });
     const devApp = createApiApp(database.database, devConfig);
     const origin = `https://${devDomain}`;
+    expect(devConfig.frontendOrigins).toContain("http://localhost");
 
     for (const path of ["/api/v1/auth/login", "/api/v1/auth/forgot-password"]) {
       const response = await supertest(devApp)

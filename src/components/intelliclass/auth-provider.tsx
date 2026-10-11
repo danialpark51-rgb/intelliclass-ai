@@ -7,6 +7,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { ApiRequestError, getApiErrorMessage } from "./auth-errors";
+export { ApiRequestError } from "./auth-errors";
 
 export type AccountRole = "SUPER_ADMIN" | "INSTITUTION_ADMIN" | "TEACHER" | "STUDENT";
 
@@ -30,16 +32,6 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-export class ApiRequestError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-  ) {
-    super(message);
-    this.name = "ApiRequestError";
-  }
-}
-
 async function readResponse<T>(response: Response): Promise<T> {
   if (response.status === 204) return undefined as T;
   let body: unknown;
@@ -49,17 +41,7 @@ async function readResponse<T>(response: Response): Promise<T> {
     throw new ApiRequestError("The server returned an unreadable response.", response.status);
   }
   if (!response.ok) {
-    const message =
-      typeof body === "object" &&
-      body !== null &&
-      "error" in body &&
-      typeof body.error === "object" &&
-      body.error !== null &&
-      "message" in body.error &&
-      typeof body.error.message === "string"
-        ? body.error.message
-        : "The request could not be completed.";
-    throw new ApiRequestError(message, response.status);
+    throw new ApiRequestError(getApiErrorMessage(body), response.status);
   }
   return body as T;
 }

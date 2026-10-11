@@ -95,7 +95,13 @@ export function createApiApp(database: PrismaClient, config: ApiConfig) {
       config.frontendOrigins.includes(origin) ||
       (config.nodeEnv === "production" && isTrustedSameOriginProxyRequest(request, origin));
     if (!allowed) {
-      next(new ApiError(403, "CORS_ORIGIN_DENIED", "This origin is not allowed"));
+      next(
+        new ApiError(
+          403,
+          "CORS_ORIGIN_DENIED",
+          "Please open IntelliClass using an approved app address.",
+        ),
+      );
       return;
     }
 
