@@ -1,4 +1,4 @@
-import { AccountStatus } from "@prisma/client";
+import { AccountStatus, Prisma, UserRole } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "node:crypto";
 import { Router } from "express";
@@ -28,6 +28,34 @@ const loginSchema = z.object({
     .max(320)
     .transform((email) => email.toLowerCase()),
   password: z.string().min(1).max(128),
+});
+
+const inviteTokenSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
+const registrationSchema = z.object({
+  fullName: z
+    .string()
+    .trim()
+    .min(2)
+    .max(201)
+    .refine((name) => {
+      const [firstName, ...lastName] = name.split(/\s+/);
+      return Boolean(firstName && firstName.length <= 100 && lastName.join(" ").length <= 100);
+    }, "Enter a name no longer than 100 characters per part"),
+  email: z
+    .string()
+    .trim()
+    .email()
+    .max(320)
+    .transform((email) => email.toLowerCase()),
+  password: z
+    .string()
+    .min(12)
+    .max(128)
+    .refine((password) => Buffer.byteLength(password, "utf8") <= 72, {
+      message: "Password must be at most 72 bytes",
+    }),
+  role: z.enum([UserRole.STUDENT, UserRole.TEACHER, UserRole.INSTITUTION_ADMIN]),
+  inviteToken: inviteTokenSchema,
 });
 
 const forgotPasswordSchema = z.object({
@@ -79,6 +107,144 @@ export function createAuthRouter(
 ) {
   const router = Router();
   const requireAuth = authenticate(database, config);
+
+  router.get("/registration-invitations/:token", async (request, response) => {
+    const token = inviteTokenSchema.parse(request.params["token"]);
+    const invitation = await database.registrationInvitation.findFirst({
+      where: {
+        tokenHash: hashToken(token),
+        acceptedAt: null,
+        revokedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+      select: { email: true, role: true, expiresAt: true },
+    });
+    if (!invitation) {
+      throw new ApiError(
+        404,
+        "INVALID_INVITATION",
+        "This registration invitation is invalid, expired, or has already been used.",
+      );
+    }
+    response.json({
+      data: {
+        email: invitation.email,
+        role: invitation.role,
+        expiresAt: invitation.expiresAt,
+      },
+    });
+  });
+
+  router.post("/register", async (request, response) => {
+    const input = registrationSchema.parse(request.body);
+    const tokenHash = hashToken(input.inviteToken);
+    const now = new Date();
+    const passwordHash = await bcrypt.hash(input.password, 12);
+
+    try {
+      const created = await database.$transaction(async (transaction) => {
+        const invitation = await transaction.registrationInvitation.findUnique({
+          where: { tokenHash },
+        });
+        if (
+          !invitation ||
+          invitation.acceptedAt ||
+          invitation.revokedAt ||
+          invitation.expiresAt <= now ||
+          invitation.email !== input.email ||
+          invitation.role !== input.role
+        ) {
+          throw new ApiError(
+            400,
+            "INVALID_INVITATION",
+            "This registration invitation is invalid, expired, or does not match the email and role.",
+          );
+        }
+
+        const claimed = await transaction.registrationInvitation.updateMany({
+          where: {
+            id: invitation.id,
+            email: input.email,
+            role: input.role,
+            acceptedAt: null,
+            revokedAt: null,
+            expiresAt: { gt: now },
+          },
+          data: { acceptedAt: now },
+        });
+        if (claimed.count !== 1) {
+          throw new ApiError(
+            400,
+            "INVALID_INVITATION",
+            "This registration invitation is invalid, expired, or has already been used.",
+          );
+        }
+
+        const [firstName, ...lastName] = input.fullName.split(/\s+/);
+        const user = await transaction.user.create({
+          data: {
+            institutionId: invitation.institutionId,
+            email: input.email,
+            firstName: firstName!,
+            lastName: lastName.join(" "),
+            passwordHash,
+            role: invitation.role,
+            status: AccountStatus.ACTIVE,
+            ...(invitation.role === UserRole.STUDENT
+              ? { studentProfile: { create: {} } }
+              : invitation.role === UserRole.TEACHER
+                ? { teacherProfile: { create: {} } }
+                : {}),
+          },
+          select: {
+            id: true,
+            institutionId: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            role: true,
+          },
+        });
+        const { refreshToken, session } = await createRefreshSession(
+          transaction,
+          user.id,
+          config,
+        );
+        await writeAuditLog(transaction, {
+          institutionId: invitation.institutionId,
+          actorId: user.id,
+          action: "auth.register",
+          entityType: "User",
+          entityId: user.id,
+          metadata: { role: user.role, invitationId: invitation.id },
+        });
+        return { user, refreshToken, session };
+      });
+
+      const accessToken = await createAccessToken(
+        {
+          userId: created.user.id,
+          institutionId: created.user.institutionId,
+          role: created.user.role,
+          sessionId: created.session.id,
+        },
+        config,
+      );
+      setRefreshCookie(response, created.refreshToken, config);
+      response.status(201).json({
+        data: {
+          accessToken,
+          expiresIn: 600,
+          user: publicUser(created.user),
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new ApiError(409, "EMAIL_ALREADY_REGISTERED", "An account with this email already exists.");
+      }
+      throw error;
+    }
+  });
 
   router.post("/login", async (request, response) => {
     const input = loginSchema.parse(request.body);

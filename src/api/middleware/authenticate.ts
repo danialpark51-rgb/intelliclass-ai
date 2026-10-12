@@ -50,7 +50,7 @@ export async function createAccessToken(
 }
 
 export async function createRefreshSession(
-  database: PrismaClient,
+  database: Pick<PrismaClient, "authSession">,
   userId: string,
   config: ApiConfig,
 ) {
