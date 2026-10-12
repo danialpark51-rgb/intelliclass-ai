@@ -11,11 +11,11 @@
 ## Backend setup
 
 - The API uses Replit's PostgreSQL `DATABASE_URL` and the existing `SESSION_SECRET`. Do not print or commit either value.
-- In development, the API allowlist includes localhost and the exact HTTPS origin derived from Replit's `REPLIT_DEV_DOMAIN`. The production `start` script must set `NODE_ENV=production`, which enables secure cookies and the production CORS checks. Production allows the exact IntelliClass `.replit.app` origin plus exact additional origins in `FRONTEND_ORIGIN`; same-origin API calls forwarded by the loopback TanStack server are also checked against their forwarded host and scheme. Other `.replit.app` apps are not trusted; do not use wildcard origins.
+- Development allows localhost and the exact HTTPS origin derived from `REPLIT_DEV_DOMAIN`. Production allows the exact domains supplied by Replit in `REPLIT_DOMAINS`, the configured `APP_URL`, and any explicitly listed exact origins in `FRONTEND_ORIGIN`. Same-origin requests forwarded by a trusted loopback proxy are checked against the browser origin, forwarded host, and scheme in every environment, so the active Replit preview host works without a hardcoded app URL. Do not use wildcard origins.
 - Run `bun run db:generate` and `bun run db:migrate` to generate the Prisma client and apply development migrations.
 - No default account is created. Set `SUPER_ADMIN_EMAIL` and `SUPER_ADMIN_PASSWORD` in Replit Secrets, run `bun run bootstrap:admin`, then remove those bootstrap secrets.
 - Password-reset delivery is unavailable until an email provider is configured.
-- In production, the API binds to loopback and the TanStack server forwards same-origin `/api/*` requests to it. Same-origin requests are checked against the forwarded browser origin; set `FRONTEND_ORIGIN` only for additional, intentionally supported frontend origins. Production cookies require HTTPS. Vite's `/api` proxy is development-only.
+- In production, the API binds to loopback and the TanStack server forwards same-origin `/api/*` requests to it. In development, Vite's `/api` proxy forwards the incoming host and scheme for the same origin check. Set `FRONTEND_ORIGIN` only for additional, intentionally supported frontend origins. Production cookies require HTTPS.
 
 ## Checks
 

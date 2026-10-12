@@ -214,6 +214,14 @@ export function createAuthRouter(
         "Password reset is not configured yet. Contact your institution administrator.",
       );
     }
+    const appUrl = config.appUrl;
+    if (!appUrl) {
+      throw new ApiError(
+        503,
+        "APP_URL_NOT_CONFIGURED",
+        "Password reset is not configured yet. Contact your institution administrator.",
+      );
+    }
 
     const user = await database.user.findUnique({
       where: { email: input.email },
@@ -236,7 +244,7 @@ export function createAuthRouter(
         },
         select: { id: true },
       });
-      const resetUrl = new URL("/reset-password", config.appUrl);
+      const resetUrl = new URL("/reset-password", appUrl);
       resetUrl.searchParams.set("token", token);
 
       try {

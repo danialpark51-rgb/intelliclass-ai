@@ -140,8 +140,15 @@ Lovable/TanStack frontend in place. The API uses PostgreSQL through Prisma.
    ```
 
 4. Click **Run**. `bun run dev` starts the existing web app on port 5000 and the API
-   on port 3001. The Vite development server proxies `/api/*` and `/healthz` to the API.
+   on port 3001. The Vite development server proxies `/api/*` and `/healthz` to the API
+   and forwards the active browser host and scheme for same-origin CORS validation.
 5. Open `/api/v1/docs` for Swagger UI or `/api/v1/openapi.json` for the API document.
+
+Same-origin requests use the active request host rather than a fixed production URL.
+Published Replit deployments are also allowed using the exact domains in
+`REPLIT_DOMAINS`; set `FRONTEND_ORIGIN` for additional exact origins. Set `APP_URL`
+when a canonical password-reset link origin is needed outside Replit's configured domains.
+The login page also offers a guest student preview; it never reads or writes institution data.
 
 ### Initial Super Admin
 
@@ -176,7 +183,8 @@ events or device enforcement are fabricated.
 The existing frontend and Express API remain separate services. Deploy the API with
 `bun run api:start` on its configured port and provide `DATABASE_URL`,
 `SESSION_SECRET`, `FRONTEND_ORIGIN`, and secure cookie settings through the deployment
-environment. Use a public HTTPS API origin and set the frontend's API base URL to that
+environment. Replit supplies `REPLIT_DOMAINS` for published deployments. Set `APP_URL`
+if reset emails need a canonical public URL outside those domains. Use a public HTTPS API origin and set the frontend's API base URL to that
 origin; the Vite proxy is development-only. Set `COOKIE_SAME_SITE=none` and
 `COOKIE_SECURE=true` when the frontend and API are cross-site. Apply the checked-in
 Prisma migrations through the development database's migration workflow; do not run

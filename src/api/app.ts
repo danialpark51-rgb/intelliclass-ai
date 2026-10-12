@@ -102,7 +102,7 @@ export function createApiApp(
 
     const allowed =
       config.frontendOrigins.includes(origin) ||
-      (config.nodeEnv === "production" && isTrustedSameOriginProxyRequest(request, origin));
+      isTrustedSameOriginProxyRequest(request, origin);
     if (!allowed) {
       next(
         new ApiError(

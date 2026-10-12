@@ -16,7 +16,7 @@ export function AuthenticatedWorkspaceShell({
 }) {
   const [mobile, setMobile] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
-  const { user, signOut } = useAuth();
+  const { user, isGuest, signOut } = useAuth();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const menu = navigation[role];
@@ -58,7 +58,7 @@ export function AuthenticatedWorkspaceShell({
         <div className="sidebar-bottom">
           <div className="sidebar-profile">
             <span className="avatar">{initials}</span>
-            <span className="text-left"><strong>{name}</strong><small>{user?.email ?? ""}</small></span>
+             <span className="text-left"><strong>{isGuest ? "Guest Student" : name}</strong><small>{isGuest ? "Preview only" : user?.email ?? ""}</small></span>
           </div>
           <Button variant="outline" className="w-full justify-between" onClick={() => void logout()} disabled={signingOut}>
             {signingOut ? "Signing out…" : "Sign out"}<LogOut size={16} />

@@ -38,7 +38,7 @@ function errorText(error: unknown) {
 }
 
 export function SessionWorkspace({ page, role }: { page: string; role: Role }) {
-  const { requestJson } = useAuth();
+  const { isGuest, requestJson } = useAuth();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [classes, setClasses] = useState<ClassRecord[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -67,6 +67,13 @@ export function SessionWorkspace({ page, role }: { page: string; role: Role }) {
   async function load() {
     setLoading(true);
     setError("");
+    if (isGuest) {
+      setSessions([]);
+      setClasses([]);
+      setSubjects([]);
+      setLoading(false);
+      return;
+    }
     try {
       const [sessionResult, classResult, subjectResult] = await Promise.all([
         requestJson<Page<Session>>("sessions?page=1&pageSize=100"),
@@ -183,7 +190,7 @@ export function SessionWorkspace({ page, role }: { page: string; role: Role }) {
   return (
     <>
       <div className="page-heading">
-        <div><div className="eyebrow">CLASSROOM SESSIONS</div><h1>{titleText}<span className="heading-dot">.</span></h1><p>Sessions and attendance are loaded from your authorized class assignments.</p></div>
+        <div><div className="eyebrow">CLASSROOM SESSIONS</div><h1>{titleText}<span className="heading-dot">.</span></h1><p>{isGuest ? "Guest preview does not load or change institution sessions." : "Sessions and attendance are loaded from your authorized class assignments."}</p></div>
         <Button variant="outline" onClick={() => void load()} disabled={loading}>Refresh</Button>
       </div>
       {(error || notice) && <div className={error ? "auth-notice" : "status-badge status-success"} role={error ? "alert" : "status"}>{error || notice}</div>}
@@ -202,7 +209,7 @@ export function SessionWorkspace({ page, role }: { page: string; role: Role }) {
       {loading && sessions.length === 0 ? <LoadingState/> : (
         <Panel title={isAttendance ? "Sessions to take attendance" : "Your sessions"} subtitle={`${sessions.length} session${sessions.length === 1 ? "" : "s"} returned for your account`}>
           {sessions.length === 0 ? (
-            <EmptyState title="No sessions found" description="Schedule a class session or ask your institution administrator to assign one."/>
+            <EmptyState title="No sessions found" description={isGuest ? "Guest preview does not load institution sessions." : "Schedule a class session or ask your institution administrator to assign one."}/>
           ) : (
             <DataTable headers={["Session", "Class & subject", "Teacher", "Starts", "Status", "Actions"]}>
               {sessions.map((session) => (

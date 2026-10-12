@@ -23,6 +23,31 @@ export default defineConfig({
         "/api": {
           target: "http://127.0.0.1:3001",
           changeOrigin: true,
+          configure: (proxy) => {
+            proxy.on("proxyReq", (proxyRequest, request) => {
+              const forwardedHost = request.headers["x-forwarded-host"];
+              const host =
+                typeof forwardedHost === "string" && !forwardedHost.includes(",")
+                  ? forwardedHost
+                  : request.headers.host;
+              const forwardedProtocol = request.headers["x-forwarded-proto"];
+              const originProtocol =
+                request.headers.origin?.startsWith("https://")
+                  ? "https"
+                  : request.headers.origin?.startsWith("http://")
+                    ? "http"
+                    : undefined;
+              const protocol =
+                typeof forwardedProtocol === "string" && !forwardedProtocol.includes(",")
+                  ? forwardedProtocol
+                  : originProtocol;
+
+              if (host && protocol) {
+                proxyRequest.setHeader("x-forwarded-host", host);
+                proxyRequest.setHeader("x-forwarded-proto", protocol);
+              }
+            });
+          },
         },
         "/healthz": {
           target: "http://127.0.0.1:3001",

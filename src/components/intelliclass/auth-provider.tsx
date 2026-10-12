@@ -25,7 +25,9 @@ type TokenResponse = { data: { accessToken: string; expiresIn: number; user: Aut
 type AuthContextValue = {
   user: AuthUser | null;
   state: "restoring" | "signed-in" | "signed-out";
+  isGuest: boolean;
   signIn: (email: string, password: string) => Promise<AuthUser>;
+  continueAsGuest: () => void;
   signOut: () => Promise<void>;
   requestJson: <T>(path: string, init?: RequestInit) => Promise<T>;
 };
@@ -57,8 +59,10 @@ export { authHome };
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [state, setState] = useState<AuthContextValue["state"]>("restoring");
+  const [isGuest, setIsGuest] = useState(false);
   const tokenRef = useRef<string | null>(null);
   const refreshRef = useRef<Promise<TokenResponse | null> | null>(null);
+  const authActionVersionRef = useRef(0);
 
   const refresh = useCallback(async () => {
     if (!refreshRef.current) {
@@ -78,25 +82,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const applyTokenResponse = useCallback((result: TokenResponse) => {
     tokenRef.current = result.data.accessToken;
+    setIsGuest(false);
     setUser(result.data.user);
     setState("signed-in");
   }, []);
 
   useEffect(() => {
     let active = true;
+    const actionVersion = authActionVersionRef.current;
     void refresh()
       .then((result) => {
-        if (!active) return;
+        if (!active || actionVersion !== authActionVersionRef.current) return;
         if (result) applyTokenResponse(result);
         else {
           tokenRef.current = null;
+          setIsGuest(false);
           setUser(null);
           setState("signed-out");
         }
       })
       .catch(() => {
-        if (active) {
+        if (active && actionVersion === authActionVersionRef.current) {
           tokenRef.current = null;
+          setIsGuest(false);
           setUser(null);
           setState("signed-out");
         }
@@ -108,6 +116,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(
     async (email: string, password: string) => {
+      authActionVersionRef.current += 1;
+      setIsGuest(false);
       const response = await fetch("/api/v1/auth/login", {
         method: "POST",
         credentials: "same-origin",
@@ -121,7 +131,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [applyTokenResponse],
   );
 
+  const continueAsGuest = useCallback(() => {
+    authActionVersionRef.current += 1;
+    tokenRef.current = null;
+    setUser({
+      id: "guest-preview",
+      institutionId: null,
+      email: "guest@preview.intelliclass",
+      firstName: "Guest",
+      lastName: "Student",
+      role: "STUDENT",
+    });
+    setIsGuest(true);
+    setState("signed-in");
+    void fetch("/api/v1/auth/logout", {
+      method: "POST",
+      credentials: "same-origin",
+    }).catch(() => undefined);
+  }, []);
+
   const signOut = useCallback(async () => {
+    authActionVersionRef.current += 1;
     try {
       await fetch("/api/v1/auth/logout", {
         method: "POST",
@@ -129,6 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     } finally {
       tokenRef.current = null;
+      setIsGuest(false);
       setUser(null);
       setState("signed-out");
     }
@@ -136,6 +167,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const requestJson = useCallback(
     async <T,>(path: string, init: RequestInit = {}): Promise<T> => {
+      if (isGuest) {
+        throw new ApiRequestError(
+          "Guest preview is limited to the student workspace and does not access institution data.",
+          403,
+        );
+      }
       const url = path.startsWith("/api/v1/") ? path : `/api/v1/${path.replace(/^\/+/, "")}`;
       const send = (token: string | null) => {
         const headers = new Headers(init.headers);
@@ -157,11 +194,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       return readResponse<T>(response);
     },
-    [applyTokenResponse, refresh],
+    [applyTokenResponse, isGuest, refresh],
   );
 
   return (
-    <AuthContext.Provider value={{ user, state, signIn, signOut, requestJson }}>
+    <AuthContext.Provider value={{ user, state, isGuest, signIn, continueAsGuest, signOut, requestJson }}>
       {children}
     </AuthContext.Provider>
   );

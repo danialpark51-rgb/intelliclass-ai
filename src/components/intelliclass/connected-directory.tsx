@@ -52,7 +52,7 @@ export function ConnectedDirectory({
   page: string;
   role: Role;
 }) {
-  const { user, requestJson } = useAuth();
+  const { user, isGuest, requestJson } = useAuth();
   const isAdmin = role === "admin";
   const isSuperAdmin = user?.role === "SUPER_ADMIN";
   const isClassDirectory = page === "classes" || page === "my-classes";
@@ -118,6 +118,14 @@ export function ConnectedDirectory({
     let active = true;
     setLoading(true);
     setError("");
+    if (isGuest) {
+      setRecords([]);
+      setTotal(0);
+      setLoading(false);
+      return () => {
+        active = false;
+      };
+    }
     const endpoint = isClassDirectory ? "classes" : isSubjectDirectory ? "subjects" : userRole === "STUDENT" ? "students" : "teachers";
     void requestJson<Page<UserRecord | ClassRecord | SubjectRecord>>(
       `${endpoint}${qs({ page: pageNumber, pageSize: 25, ...(isSuperAdmin ? { institutionId: institutionId || undefined } : {}) })}`,
@@ -137,7 +145,7 @@ export function ConnectedDirectory({
     return () => {
       active = false;
     };
-  }, [institutionId, isClassDirectory, isSubjectDirectory, isSuperAdmin, pageNumber, requestJson, userRole]);
+  }, [institutionId, isClassDirectory, isGuest, isSubjectDirectory, isSuperAdmin, pageNumber, requestJson, userRole]);
 
   useEffect(() => {
     if (!isAdmin || !isClassDirectory) return;
@@ -354,7 +362,7 @@ export function ConnectedDirectory({
           <EmptyState
             icon={Users}
             title={`No ${title.toLowerCase()} yet`}
-            description={error ? "The directory could not be loaded. Check your connection and retry." : "There are no records in this directory yet."}
+            description={isGuest ? "Guest preview does not load institution records." : error ? "The directory could not be loaded. Check your connection and retry." : "There are no records in this directory yet."}
           >
             {canCreate && <Button onClick={beginCreate}><Plus size={15}/>Add the first record</Button>}
           </EmptyState>

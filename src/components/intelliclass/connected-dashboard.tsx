@@ -22,7 +22,7 @@ type Summary = {
 };
 
 export function ConnectedDashboard({ role }: { role: Role }) {
-  const { user, requestJson } = useAuth();
+  const { user, isGuest, requestJson } = useAuth();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -32,6 +32,11 @@ export function ConnectedDashboard({ role }: { role: Role }) {
   async function load() {
     setLoading(true);
     setError("");
+    if (isGuest) {
+      setSummary(null);
+      setLoading(false);
+      return;
+    }
     try {
       const result = await requestJson<{ data: Summary }>("dashboard/summary");
       setSummary(result.data);
@@ -79,7 +84,7 @@ export function ConnectedDashboard({ role }: { role: Role }) {
     <>
       <div className="page-heading">
         <div>
-          <div className="eyebrow">YOUR CAMPUS, CONNECTED</div>
+          <div className="eyebrow">{isGuest ? "GUEST PREVIEW" : "YOUR CAMPUS, CONNECTED"}</div>
           <h1>{admin ? "Institution overview" : teacher ? "Your teaching overview" : "Your learning overview"}<span className="heading-dot">.</span></h1>
           <p>{admin ? "Live counts from your institution." : teacher ? "Your assigned classes and today's classroom activity." : "Your enrolled classes and today's attendance."}</p>
         </div>
@@ -88,9 +93,9 @@ export function ConnectedDashboard({ role }: { role: Role }) {
       <section className="welcome-banner">
         <img src={classroom} width={1600} height={912} alt="Students learning together in a university classroom" />
         <div className="welcome-banner-content">
-          <span className="welcome-tag"><span/> {user?.firstName ? `Welcome back, ${user.firstName}` : "Your connected classroom"}</span>
+          <span className="welcome-tag"><span/> {isGuest ? "Guest student workspace" : user?.firstName ? `Welcome back, ${user.firstName}` : "Your connected classroom"}</span>
           <h2>{admin ? "Great classrooms." : "Great learning."}<br/>Start with connection.</h2>
-          <p>{admin ? "Manage your institution's people and classes in one workspace." : teacher ? "Your classes and today's attendance are connected here." : "Your classes and attendance are connected here."}</p>
+          <p>{isGuest ? "Explore the student workspace. Institution data and account changes are not available in guest preview." : admin ? "Manage your institution's people and classes in one workspace." : teacher ? "Your classes and today's attendance are connected here." : "Your classes and attendance are connected here."}</p>
           <Button asChild><Link to={admin ? "/admin/classes" : teacher ? "/teacher/my-classes" : "/student/my-classes"}>{admin ? "Manage classes" : "View my classes"}<ArrowUpRight size={16}/></Link></Button>
         </div>
       </section>
@@ -100,7 +105,7 @@ export function ConnectedDashboard({ role }: { role: Role }) {
           {stats.map(([label, value, Icon, color]) => {
             const StatIcon = Icon as typeof Users;
             const display = value === undefined ? "—" : String(value);
-            const note = display === "No data" ? "No attendance records for today" : label === "Sessions today" ? `Institution time: ${summary?.timeZone ?? "UTC"}` : "Live database count";
+            const note = isGuest ? "Unavailable in guest preview" : display === "No data" ? "No attendance records for today" : label === "Sessions today" ? `Institution time: ${summary?.timeZone ?? "UTC"}` : "Live database count";
             return (
               <article className="stat-card" key={String(label)}>
                 <div className="stat-top"><span>{String(label)}</span><span className={`stat-icon tone-${String(color)}`}><StatIcon size={19}/></span></div>
@@ -110,17 +115,17 @@ export function ConnectedDashboard({ role }: { role: Role }) {
           })}
         </div>
         <div className="dashboard-middle">
-          <Panel title="Attendance today" subtitle={`Based on records marked today in ${summary?.timeZone ?? "UTC"}`}>
+          <Panel title="Attendance today" subtitle={isGuest ? "Institution attendance is not available in guest preview." : `Based on records marked today in ${summary?.timeZone ?? "UTC"}`}>
             {metrics?.attendanceTotal ? (
               <div className="p-5">
                 <strong className="text-3xl">{attendance}</strong>
                 <p className="mt-2 text-sm text-muted-foreground">{metrics.attendancePresent} present out of {metrics.attendanceTotal} attendance records.</p>
               </div>
             ) : (
-              <div className="p-5 text-sm text-muted-foreground">No attendance has been recorded today. No percentage is shown until records exist.</div>
+              <div className="p-5 text-sm text-muted-foreground">{isGuest ? "No institution records are loaded in guest preview." : "No attendance has been recorded today. No percentage is shown until records exist."}</div>
             )}
           </Panel>
-          <Panel title="Today's sessions" subtitle={`Calendar day in ${summary?.timeZone ?? "UTC"}`}>
+          <Panel title="Today's sessions" subtitle={isGuest ? "Institution sessions are not available in guest preview." : `Calendar day in ${summary?.timeZone ?? "UTC"}`}>
             {metrics ? (
               <div className="p-5">
                 <strong className="text-3xl">{metrics.sessionsToday}</strong>
@@ -131,7 +136,7 @@ export function ConnectedDashboard({ role }: { role: Role }) {
             ) : <div className="p-5 text-sm text-muted-foreground">Session data is unavailable.</div>}
           </Panel>
         </div>
-        <div className="dashboard-note"><span className="note-symbol"><BookOpen size={15}/></span><p>Dashboard totals reflect saved institution records, not sample data.</p><span>IntelliClass</span></div>
+        <div className="dashboard-note"><span className="note-symbol"><BookOpen size={15}/></span><p>{isGuest ? "Guest preview uses no sample or institution records." : "Dashboard totals reflect saved institution records, not sample data."}</p><span>IntelliClass</span></div>
       </>}
     </>
   );

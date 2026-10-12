@@ -16,6 +16,7 @@ const envSchema = z.object({
   API_HOST: z.string().trim().min(1).optional(),
   FRONTEND_ORIGIN: z.string().optional(),
   REPLIT_DEV_DOMAIN: z.string().trim().min(1).optional(),
+  REPLIT_DOMAINS: z.string().optional(),
   APP_URL: optionalString,
   SMTP_HOST: optionalString,
   SMTP_PORT: optionalPort,
@@ -24,8 +25,6 @@ const envSchema = z.object({
   COOKIE_SECURE: z.enum(["true", "false"]).optional(),
   COOKIE_SAME_SITE: z.enum(["strict", "lax", "none"]).default("lax"),
 });
-
-const PRODUCTION_APP_URL = "https://intelliclass-ai--luffymonkeyd338.replit.app";
 
 export type SmtpConfig = {
   host: string;
@@ -41,7 +40,7 @@ export type ApiConfig = {
   sessionSecret: string;
   port: number;
   host: string;
-  appUrl: string;
+  appUrl: string | undefined;
   frontendOrigins: string[];
   smtp: SmtpConfig | null;
   cookieSecure: boolean;
@@ -56,26 +55,6 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): ApiConfig {
   }
 
   const values = parsed.data;
-  const defaultAppUrl =
-    values.NODE_ENV === "production"
-      ? PRODUCTION_APP_URL
-      : values.REPLIT_DEV_DOMAIN
-        ? `https://${values.REPLIT_DEV_DOMAIN}`
-        : "http://localhost:5000";
-  const appUrl = values.APP_URL ?? defaultAppUrl;
-  try {
-    const parsedAppUrl = new URL(appUrl);
-    if (
-      !["http:", "https:"].includes(parsedAppUrl.protocol) ||
-      parsedAppUrl.origin !== appUrl ||
-      (values.NODE_ENV === "production" && parsedAppUrl.protocol !== "https:")
-    ) {
-      throw new Error();
-    }
-  } catch {
-    throw new Error("APP_URL must be an exact origin without a path; production must use HTTPS");
-  }
-
   const smtpParts = [values.SMTP_HOST, values.SMTP_PORT, values.EMAIL_USER, values.EMAIL_PASS];
   const smtpPartsConfigured = smtpParts.filter((part) => part !== undefined).length;
   if (smtpPartsConfigured !== 0 && smtpPartsConfigured !== smtpParts.length) {
@@ -91,6 +70,54 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): ApiConfig {
           from: values.EMAIL_USER!,
         }
       : null;
+
+  const replitDomains = values.REPLIT_DOMAINS?.split(",")
+    .map((domain) => domain.trim())
+    .filter(Boolean);
+  for (const domain of replitDomains ?? []) {
+    try {
+      const parsedDomain = new URL(`https://${domain}`);
+      if (
+        parsedDomain.origin !== `https://${domain}` ||
+        parsedDomain.hostname !== domain ||
+        parsedDomain.username ||
+        parsedDomain.password
+      ) {
+        throw new Error();
+      }
+    } catch {
+      throw new Error("REPLIT_DOMAINS must contain comma-separated hostnames without schemes or paths");
+    }
+  }
+
+  const replitOrigins = (replitDomains ?? []).map((domain) => `https://${domain}`);
+  const defaultProductionAppUrl = replitOrigins.find((origin) =>
+    new URL(origin).hostname.endsWith(".replit.app"),
+  ) ?? replitOrigins[0];
+  const appUrl =
+    values.APP_URL ??
+    (values.NODE_ENV === "production"
+      ? defaultProductionAppUrl
+      : values.REPLIT_DEV_DOMAIN
+        ? `https://${values.REPLIT_DEV_DOMAIN}`
+        : "http://localhost:5000");
+  if (appUrl) {
+    try {
+      const parsedAppUrl = new URL(appUrl);
+      if (
+        !["http:", "https:"].includes(parsedAppUrl.protocol) ||
+        parsedAppUrl.origin !== appUrl ||
+        (values.NODE_ENV === "production" && parsedAppUrl.protocol !== "https:")
+      ) {
+        throw new Error();
+      }
+    } catch {
+      throw new Error("APP_URL must be an exact origin without a path; production must use HTTPS");
+    }
+  }
+  if (values.NODE_ENV === "production" && smtp && !appUrl) {
+    throw new Error("APP_URL or REPLIT_DOMAINS is required when production email is configured");
+  }
 
   const frontendOrigins = values.FRONTEND_ORIGIN?.split(",")
     .map((origin) => origin.trim())
@@ -147,9 +174,9 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): ApiConfig {
     frontendOrigins: [
       ...new Set([
         ...(values.NODE_ENV === "development" ? developmentOrigins : []),
-        ...(values.NODE_ENV === "production" ? [PRODUCTION_APP_URL] : []),
+        ...(values.NODE_ENV === "production" ? replitOrigins : []),
         ...(frontendOrigins ?? []),
-        appUrl,
+        ...(appUrl ? [appUrl] : []),
       ]),
     ],
     smtp,

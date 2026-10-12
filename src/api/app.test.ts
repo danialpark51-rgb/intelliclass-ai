@@ -102,19 +102,21 @@ describe("IntelliClass API", () => {
     app = createApiApp(database.database, config);
   });
 
-  it("uses the exact production app origin without allowing the Replit dev domain", () => {
+  it("uses configured production Replit domains without hardcoded app URLs", () => {
     const productionConfig = loadConfig({
       NODE_ENV: "production",
       DATABASE_URL: "postgresql://test.invalid/test",
       SESSION_SECRET: "this-is-a-test-only-signing-secret-at-least-32",
       REPLIT_DEV_DOMAIN: "dev.example.replit.dev",
+      REPLIT_DOMAINS: "intelliclass-preview.replit.app,campus.example",
     });
 
     expect(productionConfig.host).toBe("127.0.0.1");
     expect(productionConfig.frontendOrigins).toEqual([
-      "https://intelliclass-ai--luffymonkeyd338.replit.app",
+      "https://intelliclass-preview.replit.app",
+      "https://campus.example",
     ]);
-    expect(productionConfig.appUrl).toBe("https://intelliclass-ai--luffymonkeyd338.replit.app");
+    expect(productionConfig.appUrl).toBe("https://intelliclass-preview.replit.app");
     expect(productionConfig.cookieSecure).toBe(true);
 
     const productionAllowlist = loadConfig({
@@ -122,12 +124,19 @@ describe("IntelliClass API", () => {
       DATABASE_URL: "postgresql://test.invalid/test",
       SESSION_SECRET: "this-is-a-test-only-signing-secret-at-least-32",
       FRONTEND_ORIGIN: "https://campus.example",
-      REPLIT_DEV_DOMAIN: "dev.example.replit.dev",
+      REPLIT_DOMAINS: "intelliclass-preview.replit.app",
     });
     expect(productionAllowlist.frontendOrigins).toEqual([
-      "https://intelliclass-ai--luffymonkeyd338.replit.app",
+      "https://intelliclass-preview.replit.app",
       "https://campus.example",
     ]);
+    expect(
+      loadConfig({
+        NODE_ENV: "production",
+        DATABASE_URL: "postgresql://test.invalid/test",
+        SESSION_SECRET: "this-is-a-test-only-signing-secret-at-least-32",
+      }).frontendOrigins,
+    ).toEqual([]);
 
     const developmentConfig = loadConfig({
       NODE_ENV: "development",
@@ -156,22 +165,23 @@ describe("IntelliClass API", () => {
     ).toThrow("SMTP_HOST, SMTP_PORT, EMAIL_USER, and EMAIL_PASS must be configured together");
   });
 
-  it("allows the exact production Replit app origin and rejects sibling deployments", async () => {
+  it("allows configured production origins and rejects sibling deployments", async () => {
     const productionConfig = loadConfig({
       NODE_ENV: "production",
       DATABASE_URL: "postgresql://test.invalid/test",
       SESSION_SECRET: "this-is-a-test-only-signing-secret-at-least-32",
+      REPLIT_DOMAINS: "intelliclass-preview.replit.app",
     });
     const productionApp = createApiApp(database.database, productionConfig);
 
     const allowed = await supertest(productionApp)
       .options("/api/v1/auth/login")
-      .set("Origin", "https://intelliclass-ai--luffymonkeyd338.replit.app")
+      .set("Origin", "https://intelliclass-preview.replit.app")
       .set("Access-Control-Request-Method", "POST")
       .set("Access-Control-Request-Headers", "content-type")
       .expect(204);
     expect(allowed.headers["access-control-allow-origin"]).toBe(
-      "https://intelliclass-ai--luffymonkeyd338.replit.app",
+      "https://intelliclass-preview.replit.app",
     );
 
     const denied = await supertest(productionApp)
@@ -184,7 +194,7 @@ describe("IntelliClass API", () => {
     );
   });
 
-  it("allows only the trusted same-origin production proxy and rejects other origins", async () => {
+  it("allows only a trusted same-origin proxy in every environment", async () => {
     const productionApp = createApiApp(database.database, {
       ...config,
       nodeEnv: "production",
@@ -210,6 +220,39 @@ describe("IntelliClass API", () => {
       .set("x-forwarded-proto", "https")
       .set("Access-Control-Request-Method", "POST")
       .set("Access-Control-Request-Headers", "content-type")
+      .expect(403);
+
+    const developmentApp = createApiApp(database.database, {
+      ...config,
+      nodeEnv: "development",
+      frontendOrigins: [],
+    });
+    const previewOrigin = "https://another-project.replit.app";
+    const devProxyResponse = await supertest(developmentApp)
+      .options("/api/v1/auth/login")
+      .set("Origin", previewOrigin)
+      .set("x-forwarded-host", "another-project.replit.app")
+      .set("x-forwarded-proto", "https")
+      .set("Access-Control-Request-Method", "POST")
+      .set("Access-Control-Request-Headers", "content-type")
+      .expect(204);
+    expect(devProxyResponse.headers["access-control-allow-origin"]).toBe(previewOrigin);
+
+    const loginResponse = await supertest(developmentApp)
+      .post("/api/v1/auth/login")
+      .set("Origin", previewOrigin)
+      .set("x-forwarded-host", "another-project.replit.app")
+      .set("x-forwarded-proto", "https")
+      .send({ email: "guest@example.edu", password: "incorrect-password" })
+      .expect(401);
+    expect(loginResponse.body.error.code).toBe("INVALID_CREDENTIALS");
+
+    await supertest(developmentApp)
+      .options("/api/v1/auth/login")
+      .set("Origin", "https://attacker.example")
+      .set("x-forwarded-host", "another-project.replit.app")
+      .set("x-forwarded-proto", "https")
+      .set("Access-Control-Request-Method", "POST")
       .expect(403);
   });
 
@@ -605,7 +648,7 @@ describe("IntelliClass API", () => {
       database.database,
       {
         ...config,
-        appUrl: "https://intelliclass-ai--luffymonkeyd338.replit.app",
+        appUrl: "https://intelliclass-preview.replit.app",
         frontendOrigins: ["https://campus.example"],
         smtp: {
           host: "smtp.example",
@@ -633,7 +676,7 @@ describe("IntelliClass API", () => {
     expect(response.body.data.message).toMatch(/If an account with that email exists/);
     expect(sender).toHaveBeenCalledOnce();
     const resetUrl = new URL(sender.mock.calls[0]![1]);
-    expect(resetUrl.origin).toBe("https://intelliclass-ai--luffymonkeyd338.replit.app");
+    expect(resetUrl.origin).toBe("https://intelliclass-preview.replit.app");
     expect(resetUrl.pathname).toBe("/reset-password");
     const rawToken = resetUrl.searchParams.get("token");
     expect(rawToken).toBeTruthy();
