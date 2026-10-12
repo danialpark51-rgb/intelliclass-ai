@@ -36,6 +36,7 @@ const delegateNames = [
   "attendanceRecord",
   "authSession",
   "passwordResetToken",
+  "registrationInvitation",
   "auditLog",
 ] as const;
 
@@ -130,6 +131,24 @@ describe("IntelliClass API", () => {
       "https://intelliclass-preview.replit.app",
       "https://campus.example",
     ]);
+    const allowedOriginsConfig = loadConfig({
+      NODE_ENV: "production",
+      DATABASE_URL: "postgresql://test.invalid/test",
+      SESSION_SECRET: "this-is-a-test-only-signing-secret-at-least-32",
+      ALLOWED_ORIGINS: "https://*.replit.app,https://portal.example",
+    });
+    expect(allowedOriginsConfig.frontendOrigins).toEqual([
+      "https://*.replit.app",
+      "https://portal.example",
+    ]);
+    expect(() =>
+      loadConfig({
+        NODE_ENV: "production",
+        DATABASE_URL: "postgresql://test.invalid/test",
+        SESSION_SECRET: "this-is-a-test-only-signing-secret-at-least-32",
+        ALLOWED_ORIGINS: "https://*.example.com",
+      }),
+    ).toThrow("ALLOWED_ORIGINS must contain exact origins");
     expect(
       loadConfig({
         NODE_ENV: "production",
@@ -192,6 +211,31 @@ describe("IntelliClass API", () => {
     expect(denied.body.error.message).toBe(
       "Please open IntelliClass using an approved app address.",
     );
+
+    const wildcardApp = createApiApp(
+      database.database,
+      loadConfig({
+        NODE_ENV: "production",
+        DATABASE_URL: "postgresql://test.invalid/test",
+        SESSION_SECRET: "this-is-a-test-only-signing-secret-at-least-32",
+        ALLOWED_ORIGINS: "https://*.replit.app",
+      }),
+    );
+    const replitAppOrigin = "https://intelliclass-ai--noobprowork.replit.app";
+    const wildcardAllowed = await supertest(wildcardApp)
+      .options("/api/v1/auth/register")
+      .set("Origin", replitAppOrigin)
+      .set("Access-Control-Request-Method", "POST")
+      .set("Access-Control-Request-Headers", "content-type")
+      .expect(204);
+    expect(wildcardAllowed.headers["access-control-allow-origin"]).toBe(replitAppOrigin);
+    expect(wildcardAllowed.headers["access-control-allow-credentials"]).toBe("true");
+
+    await supertest(wildcardApp)
+      .options("/api/v1/auth/register")
+      .set("Origin", "https://attacker.example")
+      .set("Access-Control-Request-Method", "POST")
+      .expect(403);
   });
 
   it("allows only a trusted same-origin proxy in every environment", async () => {
@@ -220,6 +264,14 @@ describe("IntelliClass API", () => {
       .set("x-forwarded-proto", "https")
       .set("Access-Control-Request-Method", "POST")
       .set("Access-Control-Request-Headers", "content-type")
+      .expect(403);
+
+    await supertest(productionApp)
+      .options("/api/v1/auth/login")
+      .set("Origin", replitOrigin)
+      .set("x-forwarded-host", `${new URL(replitOrigin).host}/extra-path`)
+      .set("x-forwarded-proto", "https")
+      .set("Access-Control-Request-Method", "POST")
       .expect(403);
 
     const developmentApp = createApiApp(database.database, {
@@ -303,7 +355,18 @@ describe("IntelliClass API", () => {
       role: UserRole.TEACHER,
       status: AccountStatus.ACTIVE,
     };
-    database.delegates["user"].findUnique.mockResolvedValue(user);
+    database.delegates["user"].findUnique
+      .mockResolvedValueOnce(user)
+      .mockResolvedValueOnce({
+        id: user.id,
+        institutionId: user.institutionId,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        status: user.status,
+        createdAt: new Date(),
+      });
     database.delegates["authSession"].create.mockResolvedValue({ id: randomUUID() });
 
     const response = await supertest(app)
@@ -323,6 +386,264 @@ describe("IntelliClass API", () => {
     expect(JSON.stringify(response.body)).not.toContain("passwordHash");
     expect(response.headers["set-cookie"]?.[0]).toContain("HttpOnly");
     expect(database.delegates["authSession"].create).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    UserRole.STUDENT,
+    UserRole.TEACHER,
+    UserRole.INSTITUTION_ADMIN,
+    UserRole.SUPER_ADMIN,
+  ])("registers an invited %s account with a hashed password and active session", async (role) => {
+    const email = `new-${role.toLowerCase()}@example.edu`;
+    const inviteToken = randomUUID().replaceAll("-", "").padEnd(43, "x").slice(0, 43);
+    const institutionId = randomUUID();
+    const invitation = {
+      id: randomUUID(),
+      institutionId,
+      email,
+      role,
+      tokenHash: hashToken(inviteToken),
+      expiresAt: new Date(Date.now() + 60_000),
+      acceptedAt: null,
+      revokedAt: null,
+    };
+    const userId = randomUUID();
+    const sessionId = randomUUID();
+    const password = "Long-Enough-Test-Password-2026";
+    database.delegates["registrationInvitation"].findFirst.mockResolvedValue({
+      email,
+      role,
+      expiresAt: invitation.expiresAt,
+    });
+    database.delegates["registrationInvitation"].findUnique.mockResolvedValue(invitation);
+    database.delegates["registrationInvitation"].updateMany.mockResolvedValue({ count: 1 });
+    database.delegates["user"].create.mockResolvedValue({
+      id: userId,
+      institutionId: role === UserRole.SUPER_ADMIN ? null : institutionId,
+      email,
+      firstName: "Jordan",
+      lastName: "Learner",
+      role,
+    });
+    database.delegates["authSession"].create.mockResolvedValue({ id: sessionId });
+    database.delegates["auditLog"].create.mockResolvedValue({ id: randomUUID() });
+
+    const verified = await supertest(app)
+      .post("/api/v1/auth/registration-invitations/verify")
+      .send({ inviteToken })
+      .expect(200);
+    expect(verified.body.data).toMatchObject({ email, role });
+
+    const response = await supertest(app)
+      .post("/api/v1/auth/register")
+      .send({
+        fullName: "Jordan Learner",
+        email,
+        password,
+        role,
+        inviteToken,
+      })
+      .expect(201);
+
+    expect(response.body.data.user).toMatchObject({
+      id: userId,
+      institutionId: role === UserRole.SUPER_ADMIN ? null : institutionId,
+      email,
+      role,
+    });
+    expect(response.body.data.accessToken).toEqual(expect.any(String));
+    expect(response.headers["set-cookie"]?.[0]).toContain("HttpOnly");
+    expect(database.delegates["registrationInvitation"].findUnique).toHaveBeenCalledWith({
+      where: { tokenHash: hashToken(inviteToken) },
+    });
+    expect(database.delegates["registrationInvitation"].updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: invitation.id, acceptedAt: null, revokedAt: null }),
+        data: { acceptedAt: expect.any(Date) },
+      }),
+    );
+    const createdUser = database.delegates["user"].create.mock.calls[0]?.[0] as {
+      data: { passwordHash: string; role: UserRole; institutionId: string | null };
+    };
+    expect(createdUser.data.role).toBe(role);
+    expect(createdUser.data.institutionId).toBe(
+      role === UserRole.SUPER_ADMIN ? null : institutionId,
+    );
+    expect(await bcrypt.compare(password, createdUser.data.passwordHash)).toBe(true);
+    expect(database.delegates["authSession"].create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ userId }) }),
+    );
+  });
+
+  it("rejects expired, reused, or role-mismatched signup invitations", async () => {
+    const inviteToken = randomUUID().replaceAll("-", "").padEnd(43, "x").slice(0, 43);
+    const invitation = {
+      id: randomUUID(),
+      institutionId: randomUUID(),
+      email: "student@example.edu",
+      role: UserRole.STUDENT,
+      expiresAt: new Date(Date.now() + 60_000),
+      acceptedAt: null,
+      revokedAt: null,
+    };
+    database.delegates["registrationInvitation"].findUnique.mockResolvedValue(invitation);
+
+    await supertest(app)
+      .post("/api/v1/auth/register")
+      .send({
+        fullName: "Jordan Learner",
+        email: invitation.email,
+        password: "Long-Enough-Test-Password-2026",
+        role: UserRole.TEACHER,
+        inviteToken,
+      })
+      .expect(400);
+    expect(database.delegates["registrationInvitation"].updateMany).not.toHaveBeenCalled();
+    expect(database.delegates["user"].create).not.toHaveBeenCalled();
+
+    database.delegates["registrationInvitation"].findUnique.mockResolvedValue({
+      ...invitation,
+      role: UserRole.TEACHER,
+      expiresAt: new Date(Date.now() - 60_000),
+    });
+    await supertest(app)
+      .post("/api/v1/auth/register")
+      .send({
+        fullName: "Jordan Learner",
+        email: invitation.email,
+        password: "Long-Enough-Test-Password-2026",
+        role: UserRole.TEACHER,
+        inviteToken,
+      })
+      .expect(400);
+    expect(database.delegates["user"].create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    UserRole.STUDENT,
+    UserRole.TEACHER,
+    UserRole.INSTITUTION_ADMIN,
+    UserRole.SUPER_ADMIN,
+  ])("logs in, reaches the protected identity route, and logs out as %s", async (role) => {
+    const password = "Valid-Test-Password-2026";
+    const user = {
+      id: randomUUID(),
+      institutionId: role === UserRole.SUPER_ADMIN ? null : randomUUID(),
+      email: `${role.toLowerCase()}@example.edu`,
+      firstName: "Taylor",
+      lastName: "User",
+      passwordHash: await bcrypt.hash(password, 4),
+      role,
+      status: AccountStatus.ACTIVE,
+    };
+    const sessionId = randomUUID();
+    database.delegates["user"].findUnique.mockResolvedValue(user);
+    database.delegates["authSession"].create.mockResolvedValue({ id: sessionId });
+    database.delegates["authSession"].findFirst.mockResolvedValue({
+      id: sessionId,
+      user: { id: user.id, institutionId: user.institutionId, role: user.role },
+    });
+    database.delegates["authSession"].updateMany.mockResolvedValue({ count: 1 });
+    database.delegates["auditLog"].create.mockResolvedValue({ id: randomUUID() });
+
+    const login = await supertest(app)
+      .post("/api/v1/auth/login")
+      .send({ email: user.email, password })
+      .expect(200);
+    const accessToken = login.body.data.accessToken as string;
+    const cookie = login.headers["set-cookie"]?.[0]?.split(";")[0]!;
+    expect(login.body.data.user.role).toBe(role);
+
+    const identity = await supertest(app)
+      .get("/api/v1/auth/me")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .expect(200);
+    expect(identity.body.data.role).toBe(role);
+
+    await supertest(app)
+      .post("/api/v1/auth/logout")
+      .set("Cookie", cookie)
+      .expect(204);
+    expect(database.delegates["authSession"].updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { revokedAt: expect.any(Date) } }),
+    );
+  });
+
+  it("limits invitations to authorized administrators and scopes institution admins", async () => {
+    const institutionAdmin = await authorize(database.delegates, UserRole.INSTITUTION_ADMIN);
+    const institutionId = institutionAdmin.institutionId!;
+    database.delegates["institution"].findUnique.mockResolvedValue({ id: institutionId });
+    database.delegates["user"].findUnique.mockResolvedValue(null);
+    database.delegates["registrationInvitation"].updateMany.mockResolvedValue({ count: 0 });
+    database.delegates["registrationInvitation"].create.mockImplementation(
+      async ({ data }: { data: Record<string, unknown> }) => ({
+        id: randomUUID(),
+        ...data,
+      }),
+    );
+    database.delegates["auditLog"].create.mockResolvedValue({ id: randomUUID() });
+
+    const created = await supertest(app)
+      .post("/api/v1/auth/registration-invitations")
+      .set("Authorization", `Bearer ${institutionAdmin.token}`)
+      .send({ email: "new-student@example.edu", role: UserRole.STUDENT })
+      .expect(201);
+    expect(created.body.data.role).toBe(UserRole.STUDENT);
+    expect(created.body.data.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(database.delegates["registrationInvitation"].create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        institutionId,
+        createdById: institutionAdmin.userId,
+        email: "new-student@example.edu",
+        role: UserRole.STUDENT,
+        tokenHash: hashToken(created.body.data.token),
+      }),
+    });
+
+    await supertest(app)
+      .post("/api/v1/auth/registration-invitations")
+      .set("Authorization", `Bearer ${institutionAdmin.token}`)
+      .send({
+        email: "new-admin@example.edu",
+        role: UserRole.SUPER_ADMIN,
+        institutionId: randomUUID(),
+      })
+      .expect(403);
+    expect(database.delegates["registrationInvitation"].create).toHaveBeenCalledOnce();
+  });
+
+  it("allows only an existing Super Admin to invite a global Admin", async () => {
+    const student = await authorize(database.delegates, UserRole.STUDENT);
+    await supertest(app)
+      .post("/api/v1/auth/registration-invitations")
+      .set("Authorization", `Bearer ${student.token}`)
+      .send({ email: "global-admin@example.edu", role: UserRole.SUPER_ADMIN })
+      .expect(403);
+
+    const superAdmin = await authorize(database.delegates, UserRole.SUPER_ADMIN, null);
+    const institutionId = randomUUID();
+    database.delegates["institution"].findUnique.mockResolvedValue({ id: institutionId });
+    database.delegates["user"].findUnique.mockResolvedValue(null);
+    database.delegates["registrationInvitation"].updateMany.mockResolvedValue({ count: 0 });
+    database.delegates["registrationInvitation"].create.mockImplementation(
+      async ({ data }: { data: Record<string, unknown> }) => ({
+        id: randomUUID(),
+        ...data,
+      }),
+    );
+    database.delegates["auditLog"].create.mockResolvedValue({ id: randomUUID() });
+
+    const response = await supertest(app)
+      .post("/api/v1/auth/registration-invitations")
+      .set("Authorization", `Bearer ${superAdmin.token}`)
+      .send({
+        email: "global-admin@example.edu",
+        role: UserRole.SUPER_ADMIN,
+        institutionId,
+      })
+      .expect(201);
+    expect(response.body.data.role).toBe(UserRole.SUPER_ADMIN);
+    expect(JSON.stringify(response.body)).not.toContain("tokenHash");
   });
 
   it("restores a login session through refresh and revokes it on logout", async () => {

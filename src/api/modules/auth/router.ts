@@ -1,6 +1,7 @@
 import { AccountStatus, Prisma, UserRole } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "node:crypto";
+import rateLimit from "express-rate-limit";
 import { Router } from "express";
 import type { PrismaClient } from "@prisma/client";
 import type { ApiConfig } from "../../config/env";
@@ -15,6 +16,7 @@ import {
   currentAuth,
   getRefreshCookie,
   hashToken,
+  requireInstitutionId,
   sessionExpiry,
   setRefreshCookie,
 } from "../../middleware/authenticate";
@@ -54,9 +56,32 @@ const registrationSchema = z.object({
     .refine((password) => Buffer.byteLength(password, "utf8") <= 72, {
       message: "Password must be at most 72 bytes",
     }),
-  role: z.enum([UserRole.STUDENT, UserRole.TEACHER, UserRole.INSTITUTION_ADMIN]),
+  role: z.enum([
+    UserRole.STUDENT,
+    UserRole.TEACHER,
+    UserRole.INSTITUTION_ADMIN,
+    UserRole.SUPER_ADMIN,
+  ]),
   inviteToken: inviteTokenSchema,
 });
+
+const registrationInvitationSchema = z.object({
+  email: z
+    .string()
+    .trim()
+    .email()
+    .max(320)
+    .transform((email) => email.toLowerCase()),
+  role: z.enum([
+    UserRole.STUDENT,
+    UserRole.TEACHER,
+    UserRole.INSTITUTION_ADMIN,
+    UserRole.SUPER_ADMIN,
+  ]),
+  institutionId: z.string().uuid().optional(),
+});
+
+const invitationVerificationSchema = z.object({ inviteToken: inviteTokenSchema });
 
 const forgotPasswordSchema = z.object({
   email: z
@@ -107,8 +132,54 @@ export function createAuthRouter(
 ) {
   const router = Router();
   const requireAuth = authenticate(database, config);
+  const registrationLimiter = rateLimit({
+    windowMs: 15 * 60_000,
+    limit: 10,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+  });
+  const invitationVerificationLimiter = rateLimit({
+    windowMs: 60_000,
+    limit: 30,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+  });
 
-  router.get("/registration-invitations/:token", async (request, response) => {
+  router.post(
+    "/registration-invitations/verify",
+    invitationVerificationLimiter,
+    async (request, response) => {
+      const { inviteToken } = invitationVerificationSchema.parse(request.body);
+      const invitation = await database.registrationInvitation.findFirst({
+        where: {
+          tokenHash: hashToken(inviteToken),
+          acceptedAt: null,
+          revokedAt: null,
+          expiresAt: { gt: new Date() },
+        },
+        select: { email: true, role: true, expiresAt: true },
+      });
+      if (!invitation) {
+        throw new ApiError(
+          404,
+          "INVALID_INVITATION",
+          "This registration invitation is invalid, expired, or has already been used.",
+        );
+      }
+      response.json({
+        data: {
+          email: invitation.email,
+          role: invitation.role,
+          expiresAt: invitation.expiresAt,
+        },
+      });
+    },
+  );
+
+  router.get(
+    "/registration-invitations/:token",
+    invitationVerificationLimiter,
+    async (request, response) => {
     const token = inviteTokenSchema.parse(request.params["token"]);
     const invitation = await database.registrationInvitation.findFirst({
       where: {
@@ -133,9 +204,123 @@ export function createAuthRouter(
         expiresAt: invitation.expiresAt,
       },
     });
+    },
+  );
+
+  router.post("/registration-invitations", requireAuth, async (request, response) => {
+    const input = registrationInvitationSchema.parse(request.body);
+    const actor = currentAuth(response);
+    if (actor.role !== UserRole.SUPER_ADMIN && actor.role !== UserRole.INSTITUTION_ADMIN) {
+      throw new ApiError(
+        403,
+        "FORBIDDEN",
+        "Only administrators can issue registration invitations.",
+      );
+    }
+    if (
+      actor.role === UserRole.INSTITUTION_ADMIN &&
+      input.role !== UserRole.STUDENT &&
+      input.role !== UserRole.TEACHER
+    ) {
+      throw new ApiError(
+        403,
+        "FORBIDDEN",
+        "Institution administrators can invite students and teachers only.",
+      );
+    }
+
+    const institutionId =
+      actor.role === UserRole.SUPER_ADMIN
+        ? input.institutionId
+        : requireInstitutionId(actor);
+    if (!institutionId) {
+      throw new ApiError(
+        400,
+        "INSTITUTION_REQUIRED",
+        "Select an institution before creating this invitation.",
+      );
+    }
+    if (
+      actor.role === UserRole.INSTITUTION_ADMIN &&
+      input.institutionId &&
+      input.institutionId !== institutionId
+    ) {
+      throw new ApiError(
+        403,
+        "FORBIDDEN",
+        "Institution administrators can only invite users to their own institution.",
+      );
+    }
+
+    const token = randomBytes(32).toString("base64url");
+    const tokenHash = hashToken(token);
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const invitation = await database.$transaction(async (transaction) => {
+      const institution = await transaction.institution.findUnique({
+        where: { id: institutionId },
+        select: { id: true },
+      });
+      if (!institution) {
+        throw new ApiError(404, "INSTITUTION_NOT_FOUND", "The selected institution was not found.");
+      }
+
+      const existingUser = await transaction.user.findUnique({
+        where: { email: input.email },
+        select: { id: true },
+      });
+      if (existingUser) {
+        throw new ApiError(
+          409,
+          "EMAIL_ALREADY_REGISTERED",
+          "An account with this email already exists.",
+        );
+      }
+
+      await transaction.registrationInvitation.updateMany({
+        where: {
+          institutionId,
+          email: input.email,
+          role: input.role,
+          acceptedAt: null,
+          revokedAt: null,
+          expiresAt: { gt: now },
+        },
+        data: { revokedAt: now },
+      });
+
+      const createdInvitation = await transaction.registrationInvitation.create({
+        data: {
+          institutionId,
+          createdById: actor.userId,
+          email: input.email,
+          role: input.role,
+          tokenHash,
+          expiresAt,
+        },
+      });
+      await writeAuditLog(transaction, {
+        institutionId,
+        actorId: actor.userId,
+        action: "auth.invitation.create",
+        entityType: "RegistrationInvitation",
+        entityId: createdInvitation.id,
+        metadata: { role: input.role },
+      });
+      return createdInvitation;
+    });
+
+    response.status(201).json({
+      data: {
+        email: invitation.email,
+        role: invitation.role,
+        token,
+        expiresAt: invitation.expiresAt,
+      },
+    });
   });
 
-  router.post("/register", async (request, response) => {
+  router.post("/register", registrationLimiter, async (request, response) => {
     const input = registrationSchema.parse(request.body);
     const tokenHash = hashToken(input.inviteToken);
     const now = new Date();
@@ -183,7 +368,8 @@ export function createAuthRouter(
         const [firstName, ...lastName] = input.fullName.split(/\s+/);
         const user = await transaction.user.create({
           data: {
-            institutionId: invitation.institutionId,
+            institutionId:
+              invitation.role === UserRole.SUPER_ADMIN ? null : invitation.institutionId,
             email: input.email,
             firstName: firstName!,
             lastName: lastName.join(" "),

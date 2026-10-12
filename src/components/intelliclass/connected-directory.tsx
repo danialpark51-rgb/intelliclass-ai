@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, Eye, Pencil, Plus, RefreshCw, Trash2, Users } fr
 import { Button } from "@/components/ui/button";
 import { ApiRequestError, useAuth } from "./auth-provider";
 import { DataTable, EmptyState, Field, LoadingState, Panel, StatusBadge } from "./shared";
+import { RegistrationInvitations } from "./registration-invitations";
 import type { Role } from "@/lib/intelliclass";
 
 type Page<T> = {
@@ -335,7 +336,16 @@ export function ConnectedDirectory({
         <h1>{title}<span className="heading-dot">.</span></h1>
         <p>{isClassDirectory ? "Class records and their current assignments." : isSubjectDirectory ? "Subjects configured for your institution." : "Institution-managed accounts and access status."}</p>
       </div>
-      {canCreate && <Button onClick={beginCreate}><Plus size={16}/>Add {title.slice(0, -1)}</Button>}
+      <div className="flex flex-wrap gap-2">
+        {isAdmin && isUserDirectory && (
+          <RegistrationInvitations
+            isSuperAdmin={isSuperAdmin}
+            institutionId={institutionId}
+            institutions={institutions}
+          />
+        )}
+        {canCreate && <Button onClick={beginCreate}><Plus size={16}/>Add {title.slice(0, -1)}</Button>}
+      </div>
     </div>
   );
   const institutionSelector = isSuperAdmin && (

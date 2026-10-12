@@ -27,6 +27,13 @@ type AuthContextValue = {
   state: "restoring" | "signed-in" | "signed-out";
   isGuest: boolean;
   signIn: (email: string, password: string) => Promise<AuthUser>;
+  signUp: (
+    fullName: string,
+    email: string,
+    password: string,
+    role: AccountRole,
+    inviteToken: string,
+  ) => Promise<AuthUser>;
   continueAsGuest: () => void;
   signOut: () => Promise<void>;
   requestJson: <T>(path: string, init?: RequestInit) => Promise<T>;
@@ -131,6 +138,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [applyTokenResponse],
   );
 
+  const signUp = useCallback(
+    async (fullName: string, email: string, password: string, role: AccountRole, inviteToken: string) => {
+      authActionVersionRef.current += 1;
+      setIsGuest(false);
+      const response = await fetch("/api/v1/auth/register", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fullName, email, password, role, inviteToken }),
+      });
+      const result = await readResponse<TokenResponse>(response);
+      applyTokenResponse(result);
+      return result.data.user;
+    },
+    [applyTokenResponse],
+  );
+
   const continueAsGuest = useCallback(() => {
     authActionVersionRef.current += 1;
     tokenRef.current = null;
@@ -167,13 +191,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const requestJson = useCallback(
     async <T,>(path: string, init: RequestInit = {}): Promise<T> => {
-      if (isGuest) {
+      const url = path.startsWith("/api/v1/") ? path : `/api/v1/${path.replace(/^\/+/, "")}`;
+      const isPublicInvitationCheck = url === "/api/v1/auth/registration-invitations/verify";
+      if (isGuest && !isPublicInvitationCheck) {
         throw new ApiRequestError(
           "Guest preview is limited to the student workspace and does not access institution data.",
           403,
         );
       }
-      const url = path.startsWith("/api/v1/") ? path : `/api/v1/${path.replace(/^\/+/, "")}`;
       const send = (token: string | null) => {
         const headers = new Headers(init.headers);
         if (token) headers.set("Authorization", `Bearer ${token}`);
@@ -198,7 +223,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <AuthContext.Provider value={{ user, state, isGuest, signIn, continueAsGuest, signOut, requestJson }}>
+    <AuthContext.Provider
+      value={{ user, state, isGuest, signIn, signUp, continueAsGuest, signOut, requestJson }}
+    >
       {children}
     </AuthContext.Provider>
   );

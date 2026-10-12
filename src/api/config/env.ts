@@ -15,6 +15,7 @@ const envSchema = z.object({
   API_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   API_HOST: z.string().trim().min(1).optional(),
   FRONTEND_ORIGIN: z.string().optional(),
+  ALLOWED_ORIGINS: z.preprocess(blankToUndefined, z.string().optional()),
   REPLIT_DEV_DOMAIN: z.string().trim().min(1).optional(),
   REPLIT_DOMAINS: z.string().optional(),
   APP_URL: optionalString,
@@ -125,11 +126,35 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): ApiConfig {
   for (const origin of frontendOrigins ?? []) {
     try {
       const parsedOrigin = new URL(origin);
-      if (!["http:", "https:"].includes(parsedOrigin.protocol) || parsedOrigin.origin !== origin) {
+      if (
+        origin.includes("*") ||
+        !["http:", "https:"].includes(parsedOrigin.protocol) ||
+        parsedOrigin.origin !== origin
+      ) {
         throw new Error();
       }
     } catch {
       throw new Error("FRONTEND_ORIGIN must contain comma-separated origins without paths");
+    }
+  }
+  const allowedOrigins = values.ALLOWED_ORIGINS?.split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  for (const origin of allowedOrigins ?? []) {
+    if (origin === "https://*.replit.app") continue;
+    try {
+      const parsedOrigin = new URL(origin);
+      if (
+        origin.includes("*") ||
+        !["http:", "https:"].includes(parsedOrigin.protocol) ||
+        parsedOrigin.origin !== origin
+      ) {
+        throw new Error();
+      }
+    } catch {
+      throw new Error(
+        "ALLOWED_ORIGINS must contain exact origins or the explicit https://*.replit.app pattern",
+      );
     }
   }
 
@@ -176,6 +201,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): ApiConfig {
         ...(values.NODE_ENV === "development" ? developmentOrigins : []),
         ...(values.NODE_ENV === "production" ? replitOrigins : []),
         ...(frontendOrigins ?? []),
+        ...(allowedOrigins ?? []),
         ...(appUrl ? [appUrl] : []),
       ]),
     ],

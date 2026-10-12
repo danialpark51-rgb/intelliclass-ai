@@ -14,6 +14,8 @@
     "db:migrate": "prisma migrate dev",
     "bootstrap:admin": "bun run src/api/scripts/create-super-admin.ts",
     "build": "prisma generate && vite build",
+    "typecheck": "tsc --noEmit",
+    "validate:publish": "prisma generate && bun run typecheck && bun run test && vite build",
     "start": "NODE_ENV=production concurrently -k -s first -n web,api \"bun .output/server/index.mjs\" \"bun run api:start\"",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",

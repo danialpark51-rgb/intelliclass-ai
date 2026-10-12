@@ -98,10 +98,102 @@ export const openApiDocument = {
         },
       },
     },
+    "/auth/registration-invitations/verify": {
+      post: {
+        tags: ["Authentication"],
+        summary: "Verify a single-use registration invitation",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["inviteToken"],
+                properties: {
+                  inviteToken: { type: "string", minLength: 43, maxLength: 43 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": { description: "Invitation email, role, and expiry" },
+          "404": { description: "Invitation is invalid, expired, or already used" },
+        },
+      },
+    },
+    "/auth/register": {
+      post: {
+        tags: ["Authentication"],
+        summary: "Create an account using an administrator-issued invitation",
+        description:
+          "The invitation fixes the email and role. Global Admin accounts can only be invited by an existing Super Admin.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["fullName", "email", "password", "role", "inviteToken"],
+                properties: {
+                  fullName: { type: "string", minLength: 2, maxLength: 201 },
+                  email: { type: "string", format: "email" },
+                  password: { type: "string", format: "password", minLength: 12, maxLength: 128 },
+                  role: {
+                    type: "string",
+                    enum: ["STUDENT", "TEACHER", "INSTITUTION_ADMIN", "SUPER_ADMIN"],
+                  },
+                  inviteToken: { type: "string", minLength: 43, maxLength: 43 },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "Account created; access token returned and refresh cookie set" },
+          "400": { $ref: "#/components/responses/ValidationError" },
+          "409": { description: "Email address is already registered" },
+        },
+      },
+    },
+    "/auth/registration-invitations": {
+      post: {
+        tags: ["Authentication"],
+        summary: "Issue a one-time registration invitation",
+        description:
+          "Institution Admins may invite Students and Teachers in their own institution. Super Admins may issue invitations for any supported role.",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["email", "role"],
+                properties: {
+                  email: { type: "string", format: "email" },
+                  role: {
+                    type: "string",
+                    enum: ["STUDENT", "TEACHER", "INSTITUTION_ADMIN", "SUPER_ADMIN"],
+                  },
+                  institutionId: { type: "string", format: "uuid" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": { description: "Invitation created; raw token is returned only once" },
+          "403": { $ref: "#/components/responses/Forbidden" },
+          "404": { description: "Institution not found" },
+          "409": { description: "Email address is already registered" },
+        },
+      },
+    },
     "/auth/login": {
       post: {
         tags: ["Authentication"],
-        summary: "Sign in with an institution-provisioned account",
+        summary: "Sign in to an IntelliClass account",
         requestBody: {
           required: true,
           content: {

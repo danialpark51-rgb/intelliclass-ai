@@ -42,10 +42,35 @@ function isTrustedSameOriginProxyRequest(request: import("express").Request, ori
 
   try {
     const requestOrigin = new URL(origin);
-    const trustedOrigin = new URL(`${forwardedProtocol}://${forwardedHost}`);
+    const forwardedOrigin = `${forwardedProtocol}://${forwardedHost}`;
+    const trustedOrigin = new URL(forwardedOrigin);
     return (
       ["http:", "https:"].includes(trustedOrigin.protocol) &&
+      ["http", "https"].includes(forwardedProtocol) &&
+      requestOrigin.origin === origin &&
+      trustedOrigin.origin === forwardedOrigin &&
+      !requestOrigin.username &&
+      !requestOrigin.password &&
       requestOrigin.origin === trustedOrigin.origin
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isConfiguredOriginAllowed(origin: string, configuredOrigins: string[]) {
+  if (configuredOrigins.includes(origin)) return true;
+  if (!configuredOrigins.includes("https://*.replit.app")) return false;
+
+  try {
+    const parsedOrigin = new URL(origin);
+    return (
+      parsedOrigin.origin === origin &&
+      parsedOrigin.protocol === "https:" &&
+      parsedOrigin.hostname.endsWith(".replit.app") &&
+      parsedOrigin.hostname !== "replit.app" &&
+      !parsedOrigin.username &&
+      !parsedOrigin.password
     );
   } catch {
     return false;
@@ -73,9 +98,13 @@ export function createApiApp(
       logger,
       serializers: {
         req(request) {
+          const path = new URL(request.url ?? "/", "http://localhost").pathname.replace(
+            /(\/registration-invitations\/)[A-Za-z0-9_-]{43}$/,
+            "$1[redacted]",
+          );
           return {
             method: request.method,
-            path: new URL(request.url ?? "/", "http://localhost").pathname,
+            path,
           };
         },
         res(response) {
@@ -101,7 +130,7 @@ export function createApiApp(
     }
 
     const allowed =
-      config.frontendOrigins.includes(origin) ||
+      isConfiguredOriginAllowed(origin, config.frontendOrigins) ||
       isTrustedSameOriginProxyRequest(request, origin);
     if (!allowed) {
       next(
